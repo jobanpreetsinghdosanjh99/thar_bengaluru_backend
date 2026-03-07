@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Enum, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, ForeignKey, Enum, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -73,6 +73,7 @@ class Feed(Base):
     # Relationships
     author = relationship("User", back_populates="feeds")
     comments = relationship("FeedComment", back_populates="feed", cascade="all, delete-orphan")
+    likes = relationship("FeedLike", back_populates="feed", cascade="all, delete-orphan")
 
 
 class FeedComment(Base):
@@ -88,6 +89,20 @@ class FeedComment(Base):
     # Relationships
     feed = relationship("Feed", back_populates="comments")
     author = relationship("User", back_populates="comments")
+
+
+class FeedLike(Base):
+    """Likes on feed posts."""
+    __tablename__ = "feed_likes"
+    __table_args__ = (UniqueConstraint("feed_id", "user_id", name="uq_feed_like_user"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    feed_id = Column(Integer, ForeignKey("feeds.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    feed = relationship("Feed", back_populates="likes")
+    user = relationship("User", backref="feed_likes")
 
 
 class Accessory(Base):

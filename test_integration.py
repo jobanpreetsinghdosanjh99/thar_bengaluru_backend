@@ -1409,8 +1409,172 @@ else:
 maybe_stop(60)
 
 
+# ==================== UC004C: COMMUNITY FEED SEARCH & INTERACTION TESTS ====================
+
+# Test 61: Search Feeds (Guest/Public Access)
+print("\n[TEST 61] UC004C - Search Feeds (Guest Access)")
+print("-" * 60)
+guest_search_resp = req_get('http://localhost:8000/feeds?q=trail')
+print(f"Status Code: {guest_search_resp.status_code}")
+if guest_search_resp.status_code == 200:
+    guest_results = guest_search_resp.json()
+    print(f"✓ Guest search successful: {len(guest_results)} result(s)")
+else:
+    print(f"✗ Guest search failed: {guest_search_resp.text}")
+maybe_stop(61)
+
+# Test 62: Search Feeds Invalid Input (200+ chars)
+print("\n[TEST 62] UC004C - Search Invalid Input")
+print("-" * 60)
+invalid_query = "a" * 201
+invalid_search_resp = req_get(f'http://localhost:8000/feeds?q={invalid_query}')
+print(f"Status Code: {invalid_search_resp.status_code}")
+if invalid_search_resp.status_code == 422:
+    print("✓ Invalid search input correctly rejected (422)")
+else:
+    print(f"✗ Expected 422 but got {invalid_search_resp.status_code}: {invalid_search_resp.text}")
+maybe_stop(62)
+
+# Test 63: Search No Results
+print("\n[TEST 63] UC004C - Search No Results")
+print("-" * 60)
+no_results_resp = req_get('http://localhost:8000/feeds?q=__no_match_uc004c__')
+print(f"Status Code: {no_results_resp.status_code}")
+if no_results_resp.status_code == 200:
+    no_results = no_results_resp.json()
+    if isinstance(no_results, list) and len(no_results) == 0:
+        print("✓ No-results search returned empty list")
+    else:
+        print(f"✗ Expected empty list, got {len(no_results) if isinstance(no_results, list) else 'non-list response'}")
+else:
+    print(f"✗ No-results search failed: {no_results_resp.text}")
+maybe_stop(63)
+
+# Test 64: Search Relevance Order (title match before content match)
+print("\n[TEST 64] UC004C - Search Relevance Ordering")
+print("-" * 60)
+uc004c_title_feed_id = None
+uc004c_content_feed_id = None
+if token:
+    headers = {'Authorization': f'Bearer {token}'}
+
+    title_feed_payload = {
+        'title': 'UC004CRelevanceTrail',
+        'content': 'Generic post content for relevance test',
+        'image_url': None
+    }
+    content_feed_payload = {
+        'title': 'General Update',
+        'content': 'This post mentions UC004CRelevanceTrail in content only',
+        'image_url': None
+    }
+
+    create_title_resp = req_post('http://localhost:8000/feeds', json=title_feed_payload, headers=headers)
+    create_content_resp = req_post('http://localhost:8000/feeds', json=content_feed_payload, headers=headers)
+
+    if create_title_resp.status_code == 200 and create_content_resp.status_code == 200:
+        uc004c_title_feed_id = create_title_resp.json().get('id')
+        uc004c_content_feed_id = create_content_resp.json().get('id')
+
+        relevance_resp = req_get('http://localhost:8000/feeds?q=UC004CRelevanceTrail', headers=headers)
+        print(f"Status Code: {relevance_resp.status_code}")
+        if relevance_resp.status_code == 200:
+            relevance_results = relevance_resp.json()
+            if relevance_results:
+                top_result_id = relevance_results[0].get('id')
+                print(f"Top result ID: {top_result_id}")
+                if top_result_id == uc004c_title_feed_id:
+                    print("✓ Search relevance ordering is correct")
+                else:
+                    print("✗ Relevance ordering mismatch (expected title match first)")
+            else:
+                print("✗ No results returned for relevance query")
+        else:
+            print(f"✗ Search relevance request failed: {relevance_resp.text}")
+    else:
+        print(f"✗ Could not create relevance test feeds: title={create_title_resp.status_code}, content={create_content_resp.status_code}")
+else:
+    print("⚠ Skipped (token unavailable)")
+maybe_stop(64)
+
+# Test 65: Like Toggle (active club member)
+print("\n[TEST 65] UC004C - Toggle Like (Active Club Member)")
+print("-" * 60)
+uc004c_like_feed_id = uc004c_title_feed_id
+if token and uc004c_like_feed_id:
+    headers = {'Authorization': f'Bearer {token}'}
+    like_resp_1 = req_post(f'http://localhost:8000/feeds/{uc004c_like_feed_id}/like', headers=headers)
+    like_resp_2 = req_post(f'http://localhost:8000/feeds/{uc004c_like_feed_id}/like', headers=headers)
+    print(f"Like #1 Status: {like_resp_1.status_code}, Like #2 Status: {like_resp_2.status_code}")
+    if like_resp_1.status_code == 200 and like_resp_2.status_code == 200:
+        body1 = like_resp_1.json()
+        body2 = like_resp_2.json()
+        first_likes = body1.get('likes_count')
+        second_likes = body2.get('likes_count')
+        if isinstance(first_likes, int) and isinstance(second_likes, int) and abs(first_likes - second_likes) == 1:
+            print(f"✓ Like toggle works correctly (likes_count: {first_likes} -> {second_likes})")
+        else:
+            print("✗ Like toggle state did not update as expected")
+    else:
+        print(f"✗ Like toggle failed: {like_resp_1.text if like_resp_1.status_code != 200 else like_resp_2.text}")
+else:
+    print("⚠ Skipped (token/feed unavailable)")
+maybe_stop(65)
+
+# Test 66: Non-active member cannot like/comment
+print("\n[TEST 66] UC004C - Interaction Blocked for Non-Active Members")
+print("-" * 60)
+non_active_token = None
+login_priya_resp = req_post(
+    'http://localhost:8000/auth/login',
+    json={'email': 'priya@test.com', 'password': 'test1234'}
+)
+if login_priya_resp.status_code == 200:
+    non_active_token = login_priya_resp.json().get('access_token')
+
+if non_active_token and uc004c_like_feed_id:
+    non_active_headers = {'Authorization': f'Bearer {non_active_token}'}
+    blocked_like_resp = req_post(f'http://localhost:8000/feeds/{uc004c_like_feed_id}/like', headers=non_active_headers)
+    blocked_comment_resp = req_post(
+        f'http://localhost:8000/feeds/{uc004c_like_feed_id}/comments',
+        headers=non_active_headers,
+        json={'content': 'Should be blocked'}
+    )
+    print(f"Like Status: {blocked_like_resp.status_code}, Comment Status: {blocked_comment_resp.status_code}")
+    if blocked_like_resp.status_code == 403 and blocked_comment_resp.status_code == 403:
+        print("✓ Non-active member interaction correctly blocked (403)")
+    else:
+        print(f"✗ Expected 403/403 but got {blocked_like_resp.status_code}/{blocked_comment_resp.status_code}")
+else:
+    print("⚠ Skipped (non-active token/feed unavailable)")
+maybe_stop(66)
+
+# Test 67: Deleted/Missing post detail handling
+print("\n[TEST 67] UC004C - Missing Post Detail")
+print("-" * 60)
+missing_feed_resp = req_get('http://localhost:8000/feeds/999999999')
+print(f"Status Code: {missing_feed_resp.status_code}")
+if missing_feed_resp.status_code == 404 and 'unmarked trail' in missing_feed_resp.text.lower():
+    print("✓ Missing post returns expected 404 detail message")
+else:
+    print(f"✗ Missing post behavior mismatch: {missing_feed_resp.text}")
+maybe_stop(67)
+
+# Test 68: Search by author name
+print("\n[TEST 68] UC004C - Search by Author Name")
+print("-" * 60)
+author_search_resp = req_get('http://localhost:8000/feeds?q=Rajesh')
+print(f"Status Code: {author_search_resp.status_code}")
+if author_search_resp.status_code == 200:
+    author_results = author_search_resp.json()
+    print(f"✓ Author search successful: {len(author_results)} result(s)")
+else:
+    print(f"✗ Author search failed: {author_search_resp.text}")
+maybe_stop(68)
+
+
 print("\n" + "=" * 60)
-print("INTEGRATION TESTS COMPLETE - All 60 Tests Executed")
+print("INTEGRATION TESTS COMPLETE - All 68 Tests Executed")
 print("=" * 60)
 print("\nENDPOINT COVERAGE:")
 print("✓ Auth: login, get current user, social-login (Google/Apple/Facebook)")
@@ -1429,6 +1593,8 @@ print("✓ UC004A Edit Profile: update fields, locked email/phone validation")
 print("✓ UC004B Event Registration: list events, event details, register with co-passengers")
 print("✓ UC004B Payment: initiate payment, verify payment, WhatsApp link generation")
 print("✓ UC004B My Registrations: view user's event bookings")
+print("✓ UC004C Feed Search: keyword/author search, relevance ordering, empty results")
+print("✓ UC004C Feed Interactions: like toggle and membership-based interaction blocking")
 print("✓ Social Auth: Google, Apple, Facebook endpoints validated")
 print("✓ User Response: membership_status, tblr_membership_status fields included")
 print("✓ Authorization: guest 401 on protected, non-owner 403 on update, public access for lists")
