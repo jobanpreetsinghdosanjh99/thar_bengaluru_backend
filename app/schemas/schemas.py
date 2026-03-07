@@ -21,6 +21,10 @@ class UserResponse(BaseModel):
     name: str
     email: str
     phone: Optional[str] = None
+    address: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    preferences: Optional[str] = None
+    profile_photo: Optional[str] = None
     role: Optional[str] = None
     membership_status: Optional[str] = None
     tblr_membership_status: Optional[str] = None
@@ -34,6 +38,14 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str
     user: UserResponse
+
+class ProfileUpdate(BaseModel):
+    """UC004A: Schema for updating user profile. Email and phone are locked."""
+    name: Optional[str] = None
+    address: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    preferences: Optional[str] = None
+    profile_photo: Optional[str] = None
 
 
 # ==================== FEED SCHEMAS ====================
@@ -268,3 +280,128 @@ class ListingResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
+
+
+# ==================== UC005: EVENT REGISTRATION & PAYMENT SCHEMAS ====================
+
+class CoPassengerCreate(BaseModel):
+    name: str
+    age: int
+    gender: str  # Male, Female, Other
+
+
+class CoPassengerResponse(BaseModel):
+    id: int
+    name: str
+    age: int
+    gender: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class EventCreate(BaseModel):
+    name: str
+    description: str
+    event_date: datetime
+    location: str
+    difficulty_level: str = "moderate"
+    required_vehicle_type: Optional[str] = None
+    max_participants: int
+    registration_deadline: datetime
+    event_fee: float
+    per_person_charge: float = 0.0
+    safety_requirements: Optional[str] = None
+    image_url: Optional[str] = None
+    whatsapp_group_template: Optional[str] = None
+
+
+class EventUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    event_date: Optional[datetime] = None
+    location: Optional[str] = None
+    difficulty_level: Optional[str] = None
+    required_vehicle_type: Optional[str] = None
+    max_participants: Optional[int] = None
+    registration_deadline: Optional[datetime] = None
+    event_fee: Optional[float] = None
+    per_person_charge: Optional[float] = None
+    safety_requirements: Optional[str] = None
+    status: Optional[str] = None
+    image_url: Optional[str] = None
+
+
+class EventResponse(BaseModel):
+    id: int
+    name: str
+    description: str
+    event_date: datetime
+    location: str
+    difficulty_level: str
+    required_vehicle_type: Optional[str]
+    max_participants: int
+    current_participants: int
+    registration_deadline: datetime
+    event_fee: float
+    per_person_charge: float
+    safety_requirements: Optional[str]
+    status: str
+    image_url: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class EventRegistrationCreate(BaseModel):
+    """UC005: Registration request with co-passengers."""
+    num_copassengers: int = 0
+    copassengers: List[CoPassengerCreate] = []
+
+
+class EventRegistrationResponse(BaseModel):
+    id: int
+    event_id: int
+    user_id: int
+    registration_status: str
+    num_copassengers: int
+    total_amount: float
+    whatsapp_link: Optional[str]
+    confirmation_sent: bool
+    registered_at: datetime
+    copassengers: List[CoPassengerResponse]
+
+    class Config:
+        from_attributes = True
+
+
+class PaymentInitiate(BaseModel):
+    """UC005: Request to initiate payment."""
+    event_id: int
+    registration_id: int
+    amount: float
+    payment_gateway: str = "razorpay"  # razorpay or phonepe
+
+
+class PaymentResponse(BaseModel):
+    id: int
+    amount: float
+    currency: str
+    payment_gateway: str
+    gateway_order_id: Optional[str]
+    payment_status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PaymentVerify(BaseModel):
+    """UC005: Verify payment from gateway callback."""
+    gateway_payment_id: str
+    gateway_order_id: str
+    gateway_signature: Optional[str] = None

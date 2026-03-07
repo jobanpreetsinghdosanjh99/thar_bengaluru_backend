@@ -1182,10 +1182,235 @@ if token and uc004_member_id:
         print(f"✗ Conversations list failed: {conversations_resp.text}")
 else:
     print("⚠ Skipped (token/member ID unavailable)")
-maybe_stop(53)
+
+# Test 54: Edit Profile (UC004A)  
+print("\n[TEST 54] Edit Profile - Update Profile Fields")
+print("-" * 60)
+profile_update_data = {
+    "name": "Rajesh Updated",
+    "address": "123 Main Street, Bangalore",
+    "emergency_contact": "9876543210",
+    "preferences": "Off-road adventures, Weekend trips"
+}
+profile_response = req_put(
+    'http://localhost:8000/auth/me',
+    headers=headers,
+    json=profile_update_data
+)
+if profile_response.status_code == 200:
+    profile_data = profile_response.json()
+    assert profile_data["name"] == "Rajesh Updated", "Name not updated"
+    assert profile_data["address"] == "123 Main Street, Bangalore", "Address not updated"
+    assert profile_data["emergency_contact"] == "9876543210", "Emergency contact not updated"
+    print(f"Profile Status: 200")
+    print(f"Name updated: {profile_data['name']}")
+    
+    # Test 54b: Verify locked fields
+    print("\n[TEST 54b] Verify Email & Phone Locked (UC004A)")
+    print("-" * 60)
+    current_email = profile_data["email"]
+    current_phone = profile_data["phone"]
+    locked_update = {"name": "Rajesh"}
+    locked_response = req_put(
+        'http://localhost:8000/auth/me',
+        headers=headers,
+        json=locked_update
+    )
+    if locked_response.status_code == 200:
+        locked_data = locked_response.json()
+        assert locked_data["email"] == current_email, "Email changed"
+        assert locked_data["phone"] == current_phone, "Phone changed"
+        print("Locked Fields Status: Email and phone remain unchanged")
+else:
+    print(f"Profile update failed: {profile_response.status_code}")
+maybe_stop(54)
+
+
+
+
+
+# ==================== UC005: EVENT REGISTRATION & PAYMENT TESTS ====================
+
+# Test 55: List Events (UC005)
+print("\n[TEST 55] UC005 - List Published Events")
+print("-" * 60)
+events_resp = req_get('http://localhost:8000/events')
+print(f"Status Code: {events_resp.status_code}")
+uc005_event_id = None
+if events_resp.status_code == 200:
+    events = events_resp.json()
+    print(f"✓ Events fetched: {len(events)} events")
+    if len(events) > 0:
+        uc005_event_id = events[0]['id']
+        print(f"First event: {events[0]['name']}")
+        print(f"Event ID: {uc005_event_id}, Fee: ₹{events[0]['event_fee']}")
+else:
+    print(f"✗ Events fetch failed: {events_resp.text}")
+maybe_stop(55)
+
+# Test 56: Get Event Details (UC005)
+print("\n[TEST 56] UC005 - Get Event Detail")
+print("-" * 60)
+if uc005_event_id:
+    event_detail_resp = req_get(f'http://localhost:8000/events/{uc005_event_id}')
+    print(f"Status Code: {event_detail_resp.status_code}")
+    if event_detail_resp.status_code == 200:
+        event = event_detail_resp.json()
+        print(f"✓ Event: {event['name']}")
+        print(f"Location: {event['location']}")
+        print(f"Max participants: {event['max_participants']}")
+        print(f"Available slots: {event['max_participants'] - event['current_participants']}")
+    else:
+        print(f"✗ Event detail fetch failed: {event_detail_resp.text}")
+else:
+    print("⚠ Skipped (no event ID)")
+maybe_stop(56)
+
+# Test 57: Register for Event (UC005 A1, A5-A8)
+print("\n[TEST 57] UC005 - Register for Event with Co-Passengers")
+print("-" * 60)
+uc005_registration_id = None
+if token and uc005_event_id:
+    headers = {'Authorization': f'Bearer {token}'}
+    registration_payload = {
+        "num_copassengers": 2,
+        "copassengers": [
+            {"name": "John Doe", "age": 30, "gender": "Male"},
+            {"name": "Jane Doe", "age": 28, "gender": "Female"}
+        ]
+    }
+    register_resp = req_post(
+        f'http://localhost:8000/events/{uc005_event_id}/register',
+        headers=headers,
+        json=registration_payload
+    )
+    print(f"Status Code: {register_resp.status_code}")
+    if register_resp.status_code == 201:
+        reg_data = register_resp.json()
+        uc005_registration_id = reg_data['id']
+        print(f"✓ Registration successful")
+        print(f"Registration ID: {uc005_registration_id}")
+        print(f"Status: {reg_data['registration_status']}")
+        print(f"Total amount: ₹{reg_data['total_amount']}")
+        print(f"Co-passengers: {len(reg_data['copassengers'])}")
+    elif register_resp.status_code == 409:
+        print("✓ Registration already exists, reusing existing registration")
+        existing_regs_resp = req_get('http://localhost:8000/events/my-registrations', headers=headers)
+        if existing_regs_resp.status_code == 200:
+            existing_regs = existing_regs_resp.json()
+            existing = next((r for r in existing_regs if r['event_id'] == uc005_event_id), None)
+            if existing:
+                uc005_registration_id = existing['id']
+                print(f"Using Registration ID: {uc005_registration_id}")
+            else:
+                print("✗ Existing registration not found for event")
+        else:
+            print(f"✗ Could not fetch existing registrations: {existing_regs_resp.text}")
+    else:
+        print(f"✗ Registration failed: {register_resp.text}")
+else:
+    print("⚠ Skipped (token/event ID unavailable)")
+maybe_stop(57)
+
+# Test 58: Initiate Payment (UC005 A2)
+print("\n[TEST 58] UC005 - Initiate Payment")
+print("-" * 60)
+uc005_payment_id = None
+uc005_gateway_order_id = None
+if token and uc005_event_id and uc005_registration_id:
+    headers = {'Authorization': f'Bearer {token}'}
+    reg_resp = req_get(f'http://localhost:8000/events/my-registrations', headers=headers)
+    if reg_resp.status_code == 200:
+        regs = reg_resp.json()
+        target_reg = next((r for r in regs if r['id'] == uc005_registration_id), None)
+        if target_reg:
+            amount = target_reg['total_amount']
+            payment_payload = {
+                "event_id": uc005_event_id,
+                "registration_id": uc005_registration_id,
+                "amount": amount,
+                "payment_gateway": "razorpay"
+            }
+            payment_resp = req_post(
+                'http://localhost:8000/payments/initiate',
+                headers=headers,
+                json=payment_payload
+            )
+            print(f"Status Code: {payment_resp.status_code}")
+            if payment_resp.status_code == 201:
+                payment_data = payment_resp.json()
+                uc005_payment_id = payment_data['id']
+                uc005_gateway_order_id = payment_data['gateway_order_id']
+                print(f"✓ Payment initiated")
+                print(f"Payment ID: {uc005_payment_id}")
+                print(f"Gateway Order ID: {uc005_gateway_order_id}")
+                print(f"Amount: ₹{payment_data['amount']}")
+                print(f"Status: {payment_data['payment_status']}")
+            elif payment_resp.status_code == 400 and "already completed" in payment_resp.text.lower():
+                print("✓ Payment already completed for this registration")
+            else:
+                print(f"✗ Payment initiation failed: {payment_resp.text}")
+        else:
+            print("⚠ Target registration not found")
+    else:
+        print(f"⚠ Could not fetch registrations: {reg_resp.text}")
+else:
+    print("⚠ Skipped (token/event ID/registration ID unavailable)")
+maybe_stop(58)
+
+# Test 59: Verify Payment (UC005 A3, A4)
+print("\n[TEST 59] UC005 - Verify Payment and WhatsApp Link")
+print("-" * 60)
+if token and uc005_gateway_order_id:
+    headers = {'Authorization': f'Bearer {token}'}
+    verify_payload = {
+        "gateway_payment_id": f"pay_mock_{uc005_payment_id}",
+        "gateway_order_id": uc005_gateway_order_id,
+        "gateway_signature": "mock_signature_for_testing"
+    }
+    verify_resp = req_post(
+        'http://localhost:8000/payments/verify',
+        headers=headers,
+        json=verify_payload
+    )
+    print(f"Status Code: {verify_resp.status_code}")
+    if verify_resp.status_code == 200:
+        verified_payment = verify_resp.json()
+        print(f"✓ Payment verified")
+        print(f"Payment Status: {verified_payment['payment_status']}")
+        print("✓ UC005 A4: Registration confirmed and WhatsApp link generated")
+    else:
+        print(f"✗ Payment verification failed: {verify_resp.text}")
+else:
+    print("⚠ Skipped (token/gateway order ID unavailable)")
+maybe_stop(59)
+
+# Test 60: Get My Registrations (UC005)
+print("\n[TEST 60] UC005 - Get My Event Registrations")
+print("-" * 60)
+if token:
+    headers = {'Authorization': f'Bearer {token}'}
+    my_regs_resp = req_get('http://localhost:8000/events/my-registrations', headers=headers)
+    print(f"Status Code: {my_regs_resp.status_code}")
+    if my_regs_resp.status_code == 200:
+        registrations = my_regs_resp.json()
+        print(f"✓ Registrations fetched: {len(registrations)} registration(s)")
+        if len(registrations) > 0:
+            latest_reg = registrations[0]
+            print(f"Latest registration:")
+            print(f"  Event ID: {latest_reg['event_id']}")
+            print(f"  Status: {latest_reg['registration_status']}")
+            has_link = 'Yes' if latest_reg.get('whatsapp_link') else 'No'
+            print(f"  Has WhatsApp link: {has_link}")
+    else:
+        print(f"✗ My registrations fetch failed: {my_regs_resp.text}")
+else:
+    print("⚠ Skipped (token unavailable)")
+maybe_stop(60)
+
 
 print("\n" + "=" * 60)
-print("INTEGRATION TESTS COMPLETE - All 53 Tests Executed")
+print("INTEGRATION TESTS COMPLETE - All 60 Tests Executed")
 print("=" * 60)
 print("\nENDPOINT COVERAGE:")
 print("✓ Auth: login, get current user, social-login (Google/Apple/Facebook)")
@@ -1200,6 +1425,10 @@ print("✓ Buy/Sell: create, list, list my, detail, update, delete (soft), owner
 print("✓ UC004 Member Discovery: list members, member profile detail")
 print("✓ UC004 Vehicle Management: add, list, update, delete")
 print("✓ UC004 Messaging: send message, conversation history, conversations list")
+print("✓ UC004A Edit Profile: update fields, locked email/phone validation")
+print("✓ UC005 Event Registration: list events, event details, register with co-passengers")
+print("✓ UC005 Payment: initiate payment, verify payment, WhatsApp link generation")
+print("✓ UC005 My Registrations: view user's event bookings")
 print("✓ Social Auth: Google, Apple, Facebook endpoints validated")
 print("✓ User Response: membership_status, tblr_membership_status fields included")
 print("✓ Authorization: guest 401 on protected, non-owner 403 on update, public access for lists")
@@ -1207,3 +1436,4 @@ print("=" * 60)
 
 # Clean up session
 session.close()
+

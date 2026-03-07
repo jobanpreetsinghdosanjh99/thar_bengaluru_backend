@@ -183,6 +183,122 @@ def seed_data():
             db.rollback()
             print(f" Error seeding messages: {e}")
         
+        # UC005: Insert test events
+        try:
+            events_count = db.execute(text("SELECT COUNT(*) as count FROM events")).fetchone()
+            if events_count.count == 0:
+                # Get any user ID to create events (in production, would be admin only)
+                first_user = db.execute(text("SELECT id FROM users ORDER BY id LIMIT 1")).fetchone()
+                if first_user:
+                    creator_id = first_user[0]
+                    db.execute(text(f"""
+                        INSERT INTO events (
+                            name, description, event_date, location, 
+                            difficulty_level, required_vehicle_type, max_participants, current_participants,
+                            registration_deadline, event_fee, per_person_charge, 
+                            safety_requirements, image_url, created_by, status, created_at
+                        ) VALUES
+                        (
+                            'Weekend Trail to Nandi Hills',
+                            'Join us for an exciting morning trail to Nandi Hills. Experience breathtaking sunrise views and challenging off-road terrain. Perfect for beginners and experienced riders alike.',
+                            NOW() + INTERVAL '15 days',
+                            'Nandi Hills, Karnataka',
+                            'EASY',
+                            '4x4 SUV',
+                            20,
+                            0,
+                            NOW() + INTERVAL '10 days',
+                            1500.00,
+                            500.00,
+                            'Basic safety gear, First aid kit, Valid driving license',
+                            'https://example.com/nandi-hills.jpg',
+                            {creator_id},
+                            'PUBLISHED',
+                            NOW()
+                        ),
+                        (
+                            'Coorg Adventure Expedition',
+                            'Multi-day expedition through the coffee plantations and mountains of Coorg. Includes camping, bonfire, and authentic Coorgi cuisine. Limited slots available!',
+                            NOW() + INTERVAL '30 days',
+                            'Coorg, Karnataka',
+                            'MODERATE',
+                            '4x4 SUV with high ground clearance',
+                            15,
+                            0,
+                            NOW() + INTERVAL '20 days',
+                            3500.00,
+                            1500.00,
+                            'Emergency medical kit, Camping gear, Recovery equipment, CB Radio',
+                            'https://example.com/coorg-expedition.jpg',
+                            {creator_id},
+                            'PUBLISHED',
+                            NOW()
+                        ),
+                        (
+                            'Dandeli River Crossing Challenge',
+                            'Extreme off-road challenge with river crossings, rocky terrain, and steep climbs. Recommended for experienced drivers only. Professional marshals will be present.',
+                            NOW() + INTERVAL '45 days',
+                            'Dandeli, Karnataka',
+                            'DIFFICULT',
+                            'Modified 4x4 with snorkel and winch',
+                            10,
+                            0,
+                            NOW() + INTERVAL '35 days',
+                            5000.00,
+                            2000.00,
+                            'Advanced recovery gear, Winch, Snorkel, CB Radio, Emergency contact, Medical insurance',
+                            'https://example.com/dandeli-challenge.jpg',
+                            {creator_id},
+                            'PUBLISHED',
+                            NOW()
+                        ),
+                        (
+                            'Night Drive Experience - Kolar',
+                            'Experience the thrill of night driving through forest trails near Kolar. Navigate with headlights and spotlights through challenging terrain.',
+                            NOW() + INTERVAL '7 days',
+                            'Kolar Gold Fields, Karnataka',
+                            'MODERATE',
+                            '4x4 SUV',
+                            12,
+                            0,
+                            NOW() + INTERVAL '5 days',
+                            2000.00,
+                            800.00,
+                            'Working spotlights, GPS device, Emergency beacon, First aid',
+                            'https://example.com/night-drive.jpg',
+                            {creator_id},
+                            'PUBLISHED',
+                            NOW()
+                        ),
+                        (
+                            'Future Expedition - TBD',
+                            'Planning stage expedition. Details will be announced soon. Register your interest!',
+                            NOW() + INTERVAL '60 days',
+                            'To be decided',
+                            'MODERATE',
+                            '4x4 SUV',
+                            25,
+                            0,
+                            NOW() + INTERVAL '50 days',
+                            0.00,
+                            0.00,
+                            'TBD',
+                            'https://example.com/placeholder.jpg',
+                            {creator_id},
+                            'DRAFT',
+                            NOW()
+                        )
+                    """))
+                    db.commit()
+                    print(" Created 5 test events (4 published, 1 draft)")
+                else:
+                    print(" No users found, skipping events creation")
+            else:
+                print(" Events already exist, skipping events creation")
+        except Exception as e:
+            db.rollback()
+            print(f" Error seeding events: {e}")
+        
         print("\n Database seeding completed successfully!")
         print("\nTest credentials for login:")
         print("  Email: rajesh@test.com")

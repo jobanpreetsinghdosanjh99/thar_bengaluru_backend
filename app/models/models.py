@@ -18,6 +18,12 @@ class User(Base):
     name = Column(String(255), nullable=False)
     email = Column(String(255), unique=True, nullable=False, index=True)
     phone = Column(String(15), nullable=True)
+
+    # UC004A: Edit Profile fields
+    address = Column(Text, nullable=True)
+    emergency_contact = Column(String(15), nullable=True)
+    preferences = Column(Text, nullable=True)
+    profile_photo = Column(String(500), nullable=True)
     password_hash = Column(String(255), nullable=False)
     role = Column(Enum(UserRole), default=UserRole.USER)
     
@@ -242,3 +248,123 @@ class Message(Base):
     # Relationships
     sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_messages")
     receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages")
+
+# ==================== UC005: EVENT REGISTRATION & PAYMENT ====================
+
+class EventStatus(str, enum.Enum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+    CANCELLED = "cancelled"
+    COMPLETED = "completed"
+
+
+class EventDifficulty(str, enum.Enum):
+    EASY = "easy"
+    MODERATE = "moderate"
+    DIFFICULT = "difficult"
+    EXTREME = "extreme"
+
+
+class RegistrationStatus(str, enum.Enum):
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    CANCELLED = "cancelled"
+    WAITLIST = "waitlist"
+
+
+class PaymentStatus(str, enum.Enum):
+    PENDING = "pending"
+    SUCCESS = "success"
+    FAILED = "failed"
+    REFUNDED = "refunded"
+
+
+class Event(Base):
+    """UC005: Club events for off-roading, trails, meetups."""
+    __tablename__ = "events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    event_date = Column(DateTime, nullable=False)
+    location = Column(String(500), nullable=False)
+    difficulty_level = Column(Enum(EventDifficulty), default=EventDifficulty.MODERATE)
+    required_vehicle_type = Column(String(100), nullable=True)  # e.g., "4x4 SUV"
+    max_participants = Column(Integer, nullable=False)  # Registration limit
+    current_participants = Column(Integer, default=0)
+    registration_deadline = Column(DateTime, nullable=False)
+    event_fee = Column(Float, nullable=False)  # Base fee (includes driver)
+    per_person_charge = Column(Float, default=0.0)  # Extra charge per co-passenger
+    safety_requirements = Column(Text, nullable=True)
+    status = Column(Enum(EventStatus), default=EventStatus.DRAFT)
+    image_url = Column(String(500), nullable=True)
+    whatsapp_group_template = Column(String(500), nullable=True)  # Template for group link
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    creator = relationship("User", backref="created_events")
+    registrations = relationship("EventRegistration", back_populates="event", cascade="all, delete-orphan")
+
+
+class EventRegistration(Base):
+    """UC005: User registration for events."""
+    __tablename__ = "event_registrations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    registration_status = Column(Enum(RegistrationStatus), default=RegistrationStatus.PENDING)
+    num_copassengers = Column(Integer, default=0)
+    total_amount = Column(Float, nullable=False)
+    payment_id = Column(Integer, ForeignKey("payments.id"), nullable=True)
+    whatsapp_link = Column(String(500), nullable=True)  # Unique link per participant
+    confirmation_sent = Column(Boolean, default=False)
+    registered_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    event = relationship("Event", back_populates="registrations")
+    user = relationship("User", backref="event_registrations")
+    copassengers = relationship("CoPassenger", back_populates="registration", cascade="all, delete-orphan")
+    payment = relationship("Payment", backref="event_registration",foreign_keys=[payment_id])
+
+
+class CoPassenger(Base):
+    """UC005: Co-passenger details for event registrations."""
+    __tablename__ = "copassengers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    registration_id = Column(Integer, ForeignKey("event_registrations.id"), nullable=False)
+    name = Column(String(255), nullable=False)
+    age = Column(Integer, nullable=False)
+    gender = Column(String(20), nullable=False)  # Male, Female, Other
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    registration = relationship("EventRegistration", back_populates="copassengers")
+
+
+class Payment(Base):
+    """UC005: Payment transactions for event registrations."""
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    event_id = Column(Integer, ForeignKey("events.id"), nullable=False)
+    amount = Column(Float, nullable=False)
+    currency = Column(String(3), default="INR")
+    payment_gateway = Column(String(50), nullable=False)  # "razorpay", "phonepe"
+    gateway_payment_id = Column(String(255), nullable=True)  # External payment ID
+    gateway_order_id = Column(String(255), nullable=True)  # External order ID
+    payment_status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDING)
+    payment_method = Column(String(50), nullable=True)  # UPI, Card, Netbanking
+    failure_reason = Column(Text, nullable=True)
+    payment_metadata = Column(Text, nullable=True)  # JSON for additional data
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    user = relationship("User", backref="payments")
+    event = relationship("Event", backref="payments")

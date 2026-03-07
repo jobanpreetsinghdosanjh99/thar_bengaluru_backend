@@ -4,7 +4,7 @@ from datetime import timedelta
 from typing import Optional
 from app.database import get_db
 from app.models.models import User, ClubMembershipRequest, TBLRMembership, MembershipStatus
-from app.schemas.schemas import UserRegister, UserLogin, UserResponse, TokenResponse, SocialAuthLogin
+from app.schemas.schemas import UserRegister, UserLogin, UserResponse, TokenResponse, SocialAuthLogin, ProfileUpdate
 from app.security import get_password_hash, verify_password, create_access_token, decode_access_token
 from app.config import settings
 
@@ -193,6 +193,63 @@ def get_current_user_info(current_user: User = Depends(get_current_user), db: Se
     }
     
     return UserResponse(**user_dict)
+
+
+@router.put("/me", response_model=UserResponse)
+def update_profile(
+    profile_data: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    UC004A: Update user profile.
+    Only allows updating: name, address, emergency_contact, preferences, profile_photo.
+    Email and phone are locked and can only be changed by admins.
+    """
+    # Update only the fields that are provided
+    if profile_data.name is not None:
+        current_user.name = profile_data.name
+    if profile_data.address is not None:
+        current_user.address = profile_data.address
+    if profile_data.emergency_contact is not None:
+        current_user.emergency_contact = profile_data.emergency_contact
+    if profile_data.preferences is not None:
+        current_user.preferences = profile_data.preferences
+    if profile_data.profile_photo is not None:
+        current_user.profile_photo = profile_data.profile_photo
+    
+    db.commit()
+    db.refresh(current_user)
+    
+    # Get membership statuses (same as GET /me)
+    from app.models.models import ClubMembershipRequest, TBLRMembership, MembershipStatus
+    club_membership = db.query(ClubMembershipRequest).filter(
+        ClubMembershipRequest.user_id == current_user.id,
+        ClubMembershipRequest.status.in_([MembershipStatus.APPROVED, MembershipStatus.PENDING])
+    ).order_by(ClubMembershipRequest.created_at.desc()).first()
+    
+    tblr_membership = db.query(TBLRMembership).filter(
+        TBLRMembership.user_id == current_user.id,
+        TBLRMembership.status.in_([MembershipStatus.APPROVED, MembershipStatus.PENDING])
+    ).order_by(TBLRMembership.created_at.desc()).first()
+    
+    user_dict = {
+        "id": current_user.id,
+        "name": current_user.name,
+        "email": current_user.email,
+        "phone": current_user.phone,
+        "address": current_user.address,
+        "emergency_contact": current_user.emergency_contact,
+        "preferences": current_user.preferences,
+        "profile_photo": current_user.profile_photo,
+        "role": current_user.role.value if current_user.role else "user",
+        "membership_status": club_membership.status.value if club_membership else None,
+        "tblr_membership_status": tblr_membership.status.value if tblr_membership else None,
+        "created_at": current_user.created_at
+    }
+    
+    return UserResponse(**user_dict)
+
 
 
 @router.post("/social-login", response_model=TokenResponse)
