@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import create_tables
 from app.seed import seed_data
 from app.routes import auth, feeds, accessories, merchandise, membership, tblr, cart, buy_sell, members, messages, events, payments
+from app.config import settings
 
 # Create FastAPI app
 app = FastAPI(
@@ -11,10 +12,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Add CORS middleware
+# Add CORS middleware with configurable origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify allowed origins
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

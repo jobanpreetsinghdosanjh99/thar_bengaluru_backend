@@ -283,7 +283,7 @@ class ListingResponse(BaseModel):
 
 
 
-# ==================== UC005: EVENT REGISTRATION & PAYMENT SCHEMAS ====================
+# ==================== UC004B: EVENT REGISTRATION & PAYMENT SCHEMAS ====================
 
 class CoPassengerCreate(BaseModel):
     name: str
@@ -358,7 +358,7 @@ class EventResponse(BaseModel):
 
 
 class EventRegistrationCreate(BaseModel):
-    """UC005: Registration request with co-passengers."""
+    """UC004B: Registration request with co-passengers."""
     num_copassengers: int = 0
     copassengers: List[CoPassengerCreate] = []
 
@@ -380,7 +380,7 @@ class EventRegistrationResponse(BaseModel):
 
 
 class PaymentInitiate(BaseModel):
-    """UC005: Request to initiate payment."""
+    """UC004B: Request to initiate payment."""
     event_id: int
     registration_id: int
     amount: float
@@ -401,7 +401,7 @@ class PaymentResponse(BaseModel):
 
 
 class PaymentVerify(BaseModel):
-    """UC005: Verify payment from gateway callback."""
+    """UC004B: Verify payment from gateway callback."""
     gateway_payment_id: str
     gateway_order_id: str
     gateway_signature: Optional[str] = None

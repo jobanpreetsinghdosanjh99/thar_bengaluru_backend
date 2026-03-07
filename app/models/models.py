@@ -249,7 +249,7 @@ class Message(Base):
     sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_messages")
     receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages")
 
-# ==================== UC005: EVENT REGISTRATION & PAYMENT ====================
+# ==================== UC004B: EVENT REGISTRATION & PAYMENT ====================
 
 class EventStatus(str, enum.Enum):
     DRAFT = "draft"
@@ -280,7 +280,7 @@ class PaymentStatus(str, enum.Enum):
 
 
 class Event(Base):
-    """UC005: Club events for off-roading, trails, meetups."""
+    """UC004B: Club events for off-roading, trails, meetups."""
     __tablename__ = "events"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -309,7 +309,7 @@ class Event(Base):
 
 
 class EventRegistration(Base):
-    """UC005: User registration for events."""
+    """UC004B: User registration for events."""
     __tablename__ = "event_registrations"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -332,7 +332,7 @@ class EventRegistration(Base):
 
 
 class CoPassenger(Base):
-    """UC005: Co-passenger details for event registrations."""
+    """UC004B: Co-passenger details for event registrations."""
     __tablename__ = "copassengers"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -347,7 +347,7 @@ class CoPassenger(Base):
 
 
 class Payment(Base):
-    """UC005: Payment transactions for event registrations."""
+    """UC004B: Payment transactions for event registrations."""
     __tablename__ = "payments"
 
     id = Column(Integer, primary_key=True, index=True)

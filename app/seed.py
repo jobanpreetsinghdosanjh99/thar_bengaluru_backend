@@ -183,7 +183,7 @@ def seed_data():
             db.rollback()
             print(f" Error seeding messages: {e}")
         
-        # UC005: Insert test events
+        # UC004B: Insert test events
         try:
             events_count = db.execute(text("SELECT COUNT(*) as count FROM events")).fetchone()
             if events_count.count == 0:

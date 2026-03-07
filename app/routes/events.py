@@ -22,7 +22,7 @@ router = APIRouter(prefix="/events", tags=["events"])
 
 
 def check_admin(current_user: User):
-    """UC005: Helper to verify admin role."""
+    """UC004B: Helper to verify admin role."""
     if current_user.role.value != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -32,7 +32,7 @@ def check_admin(current_user: User):
 
 def generate_whatsapp_link(event_id: int, user_id: int, registration_id: int) -> str:
     """
-    UC005: Generate unique WhatsApp link for participant.
+    UC004B: Generate unique WhatsApp link for participant.
     In production, this would integrate with WhatsApp Business API.
     For now, generates a unique identifier that can be mapped to a group invite.
     """
@@ -54,7 +54,7 @@ def list_events(
     db: Session = Depends(get_db)
 ):
     """
-    UC005: List events.
+    UC004B: List events.
     Guests/members see only published, upcoming events.
     """
     query = db.query(Event)
@@ -78,7 +78,7 @@ def get_my_registrations(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """UC005: Get current user's event registrations."""
+    """UC004B: Get current user's event registrations."""
     registrations = db.query(EventRegistration).filter(
         EventRegistration.user_id == current_user.id
     ).order_by(EventRegistration.registered_at.desc()).all()
@@ -88,7 +88,7 @@ def get_my_registrations(
 
 @router.get("/{event_id}", response_model=EventResponse)
 def get_event(event_id: int, db: Session = Depends(get_db)):
-    """UC005: Get event details."""
+    """UC004B: Get event details."""
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
@@ -102,7 +102,7 @@ def create_event(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """UC005: Create event (admin only)."""
+    """UC004B: Create event (admin only)."""
     check_admin(current_user)
     
     # Validate dates
@@ -145,7 +145,7 @@ def update_event(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """UC005: Update event (admin only)."""
+    """UC004B: Update event (admin only)."""
     check_admin(current_user)
     
     event = db.query(Event).filter(Event.id == event_id).first()
@@ -174,7 +174,7 @@ def delete_event(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """UC005: Delete event (admin only)."""
+    """UC004B: Delete event (admin only)."""
     check_admin(current_user)
     
     event = db.query(Event).filter(Event.id == event_id).first()
@@ -193,7 +193,7 @@ def register_for_event(
     db: Session = Depends(get_db)
 ):
     """
-    UC005: Register for event.
+    UC004B: Register for event.
     Main success scenario implementation.
     """
     # Get event
@@ -201,7 +201,7 @@ def register_for_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    # UC005 A5: Check membership is active (approved membership request)
+    # UC004B A5: Check membership is active (approved membership request)
     club_membership = db.query(ClubMembershipRequest).filter(
         ClubMembershipRequest.user_id == current_user.id,
         ClubMembershipRequest.status == MembershipStatus.APPROVED
@@ -213,28 +213,28 @@ def register_for_event(
             detail="Active membership required to register for events"
         )
     
-    # UC005 A8: Check event is enabled
+    # UC004B A8: Check event is enabled
     if event.status != EventStatus.PUBLISHED:
         raise HTTPException(
             status_code=400,
             detail="This event is no longer available"
         )
     
-    # UC005 A7: Check registration deadline
+    # UC004B A7: Check registration deadline
     if datetime.utcnow() > event.registration_deadline:
         raise HTTPException(
             status_code=400,
             detail="Registration for this event is closed"
         )
     
-    # UC005 A6: Check slot availability
+    # UC004B A6: Check slot availability
     if event.current_participants >= event.max_participants:
         raise HTTPException(
             status_code=400,
             detail="Event registration limit reached"
         )
     
-    # UC005: Prevent duplicate registrations
+    # UC004B: Prevent duplicate registrations
     existing = db.query(EventRegistration).filter(
         and_(
             EventRegistration.event_id == event_id,
@@ -249,7 +249,7 @@ def register_for_event(
             detail="You have already registered for this event"
         )
     
-    # UC005 A1: Validate co-passenger details
+    # UC004B A1: Validate co-passenger details
     if registration_data.num_copassengers > 0:
         if len(registration_data.copassengers) != registration_data.num_copassengers:
             raise HTTPException(
@@ -257,7 +257,7 @@ def register_for_event(
                 detail="Please enter co-passenger details before proceeding"
             )
     
-    # UC005: Calculate total amount
+    # UC004B: Calculate total amount
     total_amount = event.event_fee + (registration_data.num_copassengers * event.per_person_charge)
     
     # Create registration (status: PENDING until payment)
@@ -295,7 +295,7 @@ def get_event_registrations(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """UC005: Get event registrations (admin only)."""
+    """UC004B: Get event registrations (admin only)."""
     check_admin(current_user)
     
     registrations = db.query(EventRegistration).filter(

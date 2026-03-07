@@ -1,4 +1,4 @@
-﻿-- UC005: Event Registration & Payment Tables
+﻿-- UC004B: Event Registration & Payment Tables
 CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,

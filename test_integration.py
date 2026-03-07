@@ -1229,30 +1229,30 @@ maybe_stop(54)
 
 
 
-# ==================== UC005: EVENT REGISTRATION & PAYMENT TESTS ====================
+# ==================== UC004B: EVENT REGISTRATION & PAYMENT TESTS ====================
 
-# Test 55: List Events (UC005)
-print("\n[TEST 55] UC005 - List Published Events")
+# Test 55: List Events (UC004B)
+print("\n[TEST 55] UC004B - List Published Events")
 print("-" * 60)
 events_resp = req_get('http://localhost:8000/events')
 print(f"Status Code: {events_resp.status_code}")
-uc005_event_id = None
+uc004b_event_id = None
 if events_resp.status_code == 200:
     events = events_resp.json()
     print(f"✓ Events fetched: {len(events)} events")
     if len(events) > 0:
-        uc005_event_id = events[0]['id']
+        uc004b_event_id = events[0]['id']
         print(f"First event: {events[0]['name']}")
-        print(f"Event ID: {uc005_event_id}, Fee: ₹{events[0]['event_fee']}")
+        print(f"Event ID: {uc004b_event_id}, Fee: ₹{events[0]['event_fee']}")
 else:
     print(f"✗ Events fetch failed: {events_resp.text}")
 maybe_stop(55)
 
-# Test 56: Get Event Details (UC005)
-print("\n[TEST 56] UC005 - Get Event Detail")
+# Test 56: Get Event Details (UC004B)
+print("\n[TEST 56] UC004B - Get Event Detail")
 print("-" * 60)
-if uc005_event_id:
-    event_detail_resp = req_get(f'http://localhost:8000/events/{uc005_event_id}')
+if uc004b_event_id:
+    event_detail_resp = req_get(f'http://localhost:8000/events/{uc004b_event_id}')
     print(f"Status Code: {event_detail_resp.status_code}")
     if event_detail_resp.status_code == 200:
         event = event_detail_resp.json()
@@ -1266,11 +1266,11 @@ else:
     print("⚠ Skipped (no event ID)")
 maybe_stop(56)
 
-# Test 57: Register for Event (UC005 A1, A5-A8)
-print("\n[TEST 57] UC005 - Register for Event with Co-Passengers")
+# Test 57: Register for Event (UC004B A1, A5-A8)
+print("\n[TEST 57] UC004B - Register for Event with Co-Passengers")
 print("-" * 60)
-uc005_registration_id = None
-if token and uc005_event_id:
+uc004b_registration_id = None
+if token and uc004b_event_id:
     headers = {'Authorization': f'Bearer {token}'}
     registration_payload = {
         "num_copassengers": 2,
@@ -1280,16 +1280,16 @@ if token and uc005_event_id:
         ]
     }
     register_resp = req_post(
-        f'http://localhost:8000/events/{uc005_event_id}/register',
+        f'http://localhost:8000/events/{uc004b_event_id}/register',
         headers=headers,
         json=registration_payload
     )
     print(f"Status Code: {register_resp.status_code}")
     if register_resp.status_code == 201:
         reg_data = register_resp.json()
-        uc005_registration_id = reg_data['id']
+        uc004b_registration_id = reg_data['id']
         print(f"✓ Registration successful")
-        print(f"Registration ID: {uc005_registration_id}")
+        print(f"Registration ID: {uc004b_registration_id}")
         print(f"Status: {reg_data['registration_status']}")
         print(f"Total amount: ₹{reg_data['total_amount']}")
         print(f"Co-passengers: {len(reg_data['copassengers'])}")
@@ -1298,10 +1298,10 @@ if token and uc005_event_id:
         existing_regs_resp = req_get('http://localhost:8000/events/my-registrations', headers=headers)
         if existing_regs_resp.status_code == 200:
             existing_regs = existing_regs_resp.json()
-            existing = next((r for r in existing_regs if r['event_id'] == uc005_event_id), None)
+            existing = next((r for r in existing_regs if r['event_id'] == uc004b_event_id), None)
             if existing:
-                uc005_registration_id = existing['id']
-                print(f"Using Registration ID: {uc005_registration_id}")
+                uc004b_registration_id = existing['id']
+                print(f"Using Registration ID: {uc004b_registration_id}")
             else:
                 print("✗ Existing registration not found for event")
         else:
@@ -1312,22 +1312,22 @@ else:
     print("⚠ Skipped (token/event ID unavailable)")
 maybe_stop(57)
 
-# Test 58: Initiate Payment (UC005 A2)
-print("\n[TEST 58] UC005 - Initiate Payment")
+# Test 58: Initiate Payment (UC004B A2)
+print("\n[TEST 58] UC004B - Initiate Payment")
 print("-" * 60)
-uc005_payment_id = None
-uc005_gateway_order_id = None
-if token and uc005_event_id and uc005_registration_id:
+uc004b_payment_id = None
+uc004b_gateway_order_id = None
+if token and uc004b_event_id and uc004b_registration_id:
     headers = {'Authorization': f'Bearer {token}'}
     reg_resp = req_get(f'http://localhost:8000/events/my-registrations', headers=headers)
     if reg_resp.status_code == 200:
         regs = reg_resp.json()
-        target_reg = next((r for r in regs if r['id'] == uc005_registration_id), None)
+        target_reg = next((r for r in regs if r['id'] == uc004b_registration_id), None)
         if target_reg:
             amount = target_reg['total_amount']
             payment_payload = {
-                "event_id": uc005_event_id,
-                "registration_id": uc005_registration_id,
+                "event_id": uc004b_event_id,
+                "registration_id": uc004b_registration_id,
                 "amount": amount,
                 "payment_gateway": "razorpay"
             }
@@ -1339,11 +1339,11 @@ if token and uc005_event_id and uc005_registration_id:
             print(f"Status Code: {payment_resp.status_code}")
             if payment_resp.status_code == 201:
                 payment_data = payment_resp.json()
-                uc005_payment_id = payment_data['id']
-                uc005_gateway_order_id = payment_data['gateway_order_id']
+                uc004b_payment_id = payment_data['id']
+                uc004b_gateway_order_id = payment_data['gateway_order_id']
                 print(f"✓ Payment initiated")
-                print(f"Payment ID: {uc005_payment_id}")
-                print(f"Gateway Order ID: {uc005_gateway_order_id}")
+                print(f"Payment ID: {uc004b_payment_id}")
+                print(f"Gateway Order ID: {uc004b_gateway_order_id}")
                 print(f"Amount: ₹{payment_data['amount']}")
                 print(f"Status: {payment_data['payment_status']}")
             elif payment_resp.status_code == 400 and "already completed" in payment_resp.text.lower():
@@ -1358,14 +1358,14 @@ else:
     print("⚠ Skipped (token/event ID/registration ID unavailable)")
 maybe_stop(58)
 
-# Test 59: Verify Payment (UC005 A3, A4)
-print("\n[TEST 59] UC005 - Verify Payment and WhatsApp Link")
+# Test 59: Verify Payment (UC004B A3, A4)
+print("\n[TEST 59] UC004B - Verify Payment and WhatsApp Link")
 print("-" * 60)
-if token and uc005_gateway_order_id:
+if token and uc004b_gateway_order_id:
     headers = {'Authorization': f'Bearer {token}'}
     verify_payload = {
-        "gateway_payment_id": f"pay_mock_{uc005_payment_id}",
-        "gateway_order_id": uc005_gateway_order_id,
+        "gateway_payment_id": f"pay_mock_{uc004b_payment_id}",
+        "gateway_order_id": uc004b_gateway_order_id,
         "gateway_signature": "mock_signature_for_testing"
     }
     verify_resp = req_post(
@@ -1378,15 +1378,15 @@ if token and uc005_gateway_order_id:
         verified_payment = verify_resp.json()
         print(f"✓ Payment verified")
         print(f"Payment Status: {verified_payment['payment_status']}")
-        print("✓ UC005 A4: Registration confirmed and WhatsApp link generated")
+        print("✓ UC004B A4: Registration confirmed and WhatsApp link generated")
     else:
         print(f"✗ Payment verification failed: {verify_resp.text}")
 else:
     print("⚠ Skipped (token/gateway order ID unavailable)")
 maybe_stop(59)
 
-# Test 60: Get My Registrations (UC005)
-print("\n[TEST 60] UC005 - Get My Event Registrations")
+# Test 60: Get My Registrations (UC004B)
+print("\n[TEST 60] UC004B - Get My Event Registrations")
 print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
@@ -1426,9 +1426,9 @@ print("✓ UC004 Member Discovery: list members, member profile detail")
 print("✓ UC004 Vehicle Management: add, list, update, delete")
 print("✓ UC004 Messaging: send message, conversation history, conversations list")
 print("✓ UC004A Edit Profile: update fields, locked email/phone validation")
-print("✓ UC005 Event Registration: list events, event details, register with co-passengers")
-print("✓ UC005 Payment: initiate payment, verify payment, WhatsApp link generation")
-print("✓ UC005 My Registrations: view user's event bookings")
+print("✓ UC004B Event Registration: list events, event details, register with co-passengers")
+print("✓ UC004B Payment: initiate payment, verify payment, WhatsApp link generation")
+print("✓ UC004B My Registrations: view user's event bookings")
 print("✓ Social Auth: Google, Apple, Facebook endpoints validated")
 print("✓ User Response: membership_status, tblr_membership_status fields included")
 print("✓ Authorization: guest 401 on protected, non-owner 403 on update, public access for lists")

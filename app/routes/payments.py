@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import Optional
-import os
 import hashlib
 import hmac
 from app.database import get_db
+from app.config import settings
 from app.models.models import (
     User, Event, EventRegistration, Payment,
     RegistrationStatus, PaymentStatus, EventStatus
@@ -17,14 +17,10 @@ from app.routes.auth import get_current_user
 
 router = APIRouter(prefix="/payments", tags=["payments"])
 
-# Payment gateway credentials (load from environment)
-RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
-
 
 def generate_whatsapp_link(event_id: int, user_id: int, registration_id: int) -> str:
     """
-    UC005: Generate unique WhatsApp link for participant.
+    UC004B: Generate unique WhatsApp link for participant.
     This is a placeholder - in production, integrate with WhatsApp Business API.
     """
     import secrets
@@ -40,7 +36,7 @@ def initiate_payment(
     db: Session = Depends(get_db)
 ):
     """
-    UC005 A2: Initiate payment for event registration.
+    UC004B A2: Initiate payment for event registration.
     Creates payment order with gateway (Razorpay/PhonePe).
     """
     # Get registration
@@ -86,7 +82,7 @@ def initiate_payment(
     if payment_data.payment_gateway == "razorpay":
         # Production code:
         # import razorpay
-        # client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        # client = razorpay.Client(auth=(settings.razorpay_key_id, settings.razorpay_key_secret))
         # order = client.order.create({
         #     "amount": int(payment_data.amount * 100),  # Convert to paise
         #     "currency": "INR",
@@ -120,7 +116,7 @@ def verify_payment(
     db: Session = Depends(get_db)
 ):
     """
-    UC005 A3: Verify payment after gateway callback.
+    UC004B A3: Verify payment after gateway callback.
     Confirms payment signature and updates registration status.
     """
     # Find payment by gateway order ID
@@ -139,7 +135,7 @@ def verify_payment(
     if payment.payment_gateway == "razorpay":
         # Production signature verification:
         # generated_signature = hmac.new(
-        #     RAZORPAY_KEY_SECRET.encode(),
+        #     settings.razorpay_key_secret.encode(),
         #     f"{verify_data.gateway_order_id}|{verify_data.gateway_payment_id}".encode(),
         #     hashlib.sha256
         # ).hexdigest()
@@ -164,10 +160,10 @@ def verify_payment(
     ).first()
     
     if registration:
-        # UC005: Update registration status to CONFIRMED
+        # UC004B: Update registration status to CONFIRMED
         registration.registration_status = RegistrationStatus.CONFIRMED
         
-        # UC005 A4: Generate WhatsApp link
+        # UC004B A4: Generate WhatsApp link
         registration.whatsapp_link = generate_whatsapp_link(
             payment.event_id,
             current_user.id,
@@ -192,7 +188,7 @@ def get_payment(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """UC005: Get payment details."""
+    """UC004B: Get payment details."""
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     
     if not payment:
@@ -208,7 +204,7 @@ def get_payment(
 @router.post("/webhook/razorpay", status_code=status.HTTP_200_OK)
 async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
     """
-    UC005: Razorpay webhook endpoint for payment notifications.
+    UC004B: Razorpay webhook endpoint for payment notifications.
     This is called by Razorpay after payment completion.
     """
     # Get webhook payload
@@ -217,7 +213,7 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
     
     # Verify webhook signature
     # expected_signature = hmac.new(
-    #     RAZORPAY_KEY_SECRET.encode(),
+    #     settings.razorpay_key_secret.encode(),
     #     payload,
     #     hashlib.sha256
     # ).hexdigest()
@@ -234,7 +230,7 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
 @router.post("/webhook/phonepe", status_code=status.HTTP_200_OK)
 async def phonepe_webhook(request: Request, db: Session = Depends(get_db)):
     """
-    UC005: PhonePe webhook endpoint for payment notifications.
+    UC004B: PhonePe webhook endpoint for payment notifications.
     """
     # Similar to Razorpay webhook logic
     return {"status": "success"}
