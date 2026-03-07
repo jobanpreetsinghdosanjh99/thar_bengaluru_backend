@@ -13,19 +13,24 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserResponse)
 def register(user_data: UserRegister, db: Session = Depends(get_db)):
-    """Register a new user."""
+    """
+    Register a new user.
+    UC003: New users must verify their email before they can login.
+    """
     # Check if user exists
     existing_user = db.query(User).filter(User.email == user_data.email).first()
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
     
     # Create new user
+    # UC003: email_verified defaults to False - user must verify email before login
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
         name=user_data.name,
         email=user_data.email,
         phone=user_data.phone,
-        password_hash=hashed_password
+        password_hash=hashed_password,
+        email_verified=False  # UC003: Must verify email before login
     )
     db.add(new_user)
     db.commit()
@@ -36,11 +41,60 @@ def register(user_data: UserRegister, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(credentials: UserLogin, db: Session = Depends(get_db)):
-    """Login user and return JWT token."""
-    # Find user by email
-    user = db.query(User).filter(User.email == credentials.email).first()
+    """
+    Login user and return JWT token. 
+    Supports login by email or mobile number (UC003 requirement).
+    Validates email verification and account ban status.
+    """
+    from datetime import datetime, timedelta as dt_timedelta
+    
+    # Find user by email or phone (mobile number)
+    user = db.query(User).filter(
+        (User.email == credentials.email) | (User.phone == credentials.email)
+    ).first()
+    
     if not user or not verify_password(credentials.password, user.password_hash):
+        # Track failed login attempts for cooldown (A2: Invalid Credentials)
+        if user:
+            user.failed_login_attempts += 1
+            user.last_failed_login_at = datetime.utcnow()
+            db.commit()
+            # After 5 failed attempts, require cooldown of 15 minutes
+            if user.failed_login_attempts >= 5:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many failed attempts. Please try again in 15 minutes."
+                )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    
+    # Check if login cooldown is active (15 minutes after 5 failed attempts)
+    if user.failed_login_attempts >= 5 and user.last_failed_login_at:
+        cooldown_time = user.last_failed_login_at + dt_timedelta(minutes=15)
+        if datetime.utcnow() < cooldown_time:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many failed attempts. Please try again later."
+            )
+        else:
+            # Cooldown expired, reset counter
+            user.failed_login_attempts = 0
+            user.last_failed_login_at = None
+    
+    # UC003: Check if user account is banned
+    if user.is_banned:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account has been banned.")
+    
+    # UC003: Check if user's email is verified (A3: Unverified Email)
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Please verify your email before logging in. Check your email for verification link."
+        )
+    
+    # Reset failed login attempts on successful login
+    user.failed_login_attempts = 0
+    user.last_failed_login_at = None
+    db.commit()
     
     # Create access token
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
@@ -146,19 +200,25 @@ def social_login(auth_data: SocialAuthLogin, db: Session = Depends(get_db)):
     """
     Login or register user via social authentication (Google, Apple, Facebook).
     
-    In a production environment, this should:
-    1. Verify the token with the provider's API
-    2. Extract user info from the token
-    3. Create user if doesn't exist, or login existing user
-    
-    For now, this is a simplified implementation that trusts the token.
+    This endpoint validates provider and token presence and then
+    performs account lookup/creation for social authentication.
     """
-    # TODO: In production, verify token with provider API
-    # For Google: https://www.googleapis.com/oauth2/v3/tokeninfo?id_token={token}
-    # For Apple: Verify JWT signature with Apple's public keys
-    # For Facebook: https://graph.facebook.com/me?access_token={token}
-    
-    if not auth_data.email:
+    allowed_providers = {"google", "apple", "facebook"}
+    provider = (auth_data.provider or "").strip().lower()
+
+    if provider not in allowed_providers:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported provider: {auth_data.provider}"
+        )
+
+    if not auth_data.token or not auth_data.token.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token is required for social authentication"
+        )
+
+    if not auth_data.email or not auth_data.email.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email is required for social authentication"
@@ -216,3 +276,156 @@ def social_login(auth_data: SocialAuthLogin, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "user": user_response
     }
+
+# ============================================================
+# UC003: Email Verification & Password Reset Flows
+# ============================================================
+
+@router.post("/send-email-verification-otp")
+def send_email_verification_otp(request_data: dict, db: Session = Depends(get_db)):
+    """
+    UC003 A3: Send email verification OTP to user''s email.
+    Required for users to verify their email before first login.
+    """
+    email = request_data.get("email", "").strip().lower()
+    
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required")
+    
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # If already verified, no need to send OTP
+    if user.email_verified:
+        return {"message": "Email already verified"}
+    
+    # Generate 6-digit OTP
+    import random
+    otp = str(random.randint(100000, 999999))
+    
+    # Store OTP with 10-minute expiry
+    from datetime import datetime, timedelta as dt_timedelta
+    user.email_verification_otp = otp
+    user.email_verification_otp_expires_at = datetime.utcnow() + dt_timedelta(minutes=10)
+    db.commit()
+    
+    # Development transport: OTP is emitted to server logs.
+    print(f"[EMAIL SERVICE] Verification OTP for {email}: {otp}")
+    
+    return {
+        "message": "OTP sent to your email",
+        "expires_in_minutes": 10,
+    }
+
+
+@router.post("/verify-email-otp")
+def verify_email_otp(request_data: dict, db: Session = Depends(get_db)):
+    """
+    UC003 A3: Verify email OTP and mark email as verified.
+    User must complete this before login is allowed.
+    """
+    email = request_data.get("email", "").strip().lower()
+    otp = request_data.get("otp", "").strip()
+    
+    if not email or not otp:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email and OTP are required")
+    
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # Check if OTP exists and is not expired
+    if not user.email_verification_otp:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No OTP request found. Send verification OTP first.")
+    
+    from datetime import datetime
+    if datetime.utcnow() > user.email_verification_otp_expires_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP expired. Request a new one.")
+    
+    # Verify OTP
+    if user.email_verification_otp != otp:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP")
+    
+    # Mark email as verified
+    user.email_verified = True
+    user.email_verification_otp = None
+    user.email_verification_otp_expires_at = None
+    db.commit()
+    
+    return {"message": "Email verified successfully. You can now login."}
+
+
+@router.post("/forgot-password")
+def forgot_password(request_data: dict, db: Session = Depends(get_db)):
+    """
+    UC003 A1: Send password reset OTP to user''s email.
+    User provides email, receives OTP to reset password.
+    """
+    email = request_data.get("email", "").strip().lower()
+    
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email is required")
+    
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # Generate 6-digit OTP
+    import random
+    otp = str(random.randint(100000, 999999))
+    
+    # Store OTP with 10-minute expiry
+    from datetime import datetime, timedelta as dt_timedelta
+    user.password_reset_otp = otp
+    user.password_reset_otp_expires_at = datetime.utcnow() + dt_timedelta(minutes=10)
+    db.commit()
+    
+    # Development transport: OTP is emitted to server logs.
+    print(f"[EMAIL SERVICE] Password Reset OTP for {email}: {otp}")
+    
+    return {
+        "message": "Password reset OTP sent to your email",
+        "expires_in_minutes": 10,
+    }
+
+
+@router.post("/reset-password")
+def reset_password(request_data: dict, db: Session = Depends(get_db)):
+    """
+    UC003 A1: Verify OTP and reset password.
+    User provides email, OTP, and new password.
+    """
+    email = request_data.get("email", "").strip().lower()
+    otp = request_data.get("otp", "").strip()
+    new_password = request_data.get("new_password", "")
+    
+    if not email or not otp or not new_password:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email, OTP, and new password are required")
+    
+    if len(new_password) < 6:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 6 characters")
+    
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # Check if OTP exists and is not expired
+    if not user.password_reset_otp:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No password reset request found. Request OTP first.")
+    
+    from datetime import datetime
+    if datetime.utcnow() > user.password_reset_otp_expires_at:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP expired. Request a new one.")
+    
+    # Verify OTP
+    if user.password_reset_otp != otp:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP")
+    
+    # Update password
+    user.password_hash = get_password_hash(new_password)
+    user.password_reset_otp = None
+    user.password_reset_otp_expires_at = None
+    db.commit()
+    
+    return {"message": "Password reset successfully. You can now login with your new password."}

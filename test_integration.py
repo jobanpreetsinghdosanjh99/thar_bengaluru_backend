@@ -1,17 +1,57 @@
 import requests
 import json
 import sys
+import argparse
+
+# Performance: Persistent HTTP Session for connection pooling
+session = requests.Session()
+
+# CLI argument for partial test runs (smoke: --max-test 15, mid: --max-test 30, full: default)
+parser = argparse.ArgumentParser(description='Run integration tests up to a specified test number')
+parser.add_argument('--max-test', type=int, default=0, help='Stop after N tests (0 = run all)')
+args = parser.parse_args()
+MAX_TEST = args.max_test
+
+def req_get(url, **kwargs):
+    """Perform GET request using persistent session"""
+    kwargs.setdefault("timeout", 8)
+    return session.get(url, **kwargs)
+
+def req_post(url, **kwargs):
+    """Perform POST request using persistent session"""
+    kwargs.setdefault("timeout", 8)
+    return session.post(url, **kwargs)
+
+def req_delete(url, **kwargs):
+    """Perform DELETE request using persistent session"""
+    kwargs.setdefault("timeout", 8)
+    return session.delete(url, **kwargs)
+
+def req_put(url, **kwargs):
+    """Perform PUT request using persistent session"""
+    kwargs.setdefault("timeout", 8)
+    return session.put(url, **kwargs)
+
+def maybe_stop(current_test):
+    """Exit early if MAX_TEST checkpoint reached"""
+    if MAX_TEST > 0 and current_test >= MAX_TEST:
+        print(f"\n{'=' * 60}")
+        print(f"INTEGRATION TESTS COMPLETE - Ran tests 1-{current_test}")
+        print(f"{'=' * 60}")
+        session.close()
+        sys.exit(0)
 
 # Fix Unicode encoding on Windows
 if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8')
 print("COMPREHENSIVE INTEGRATION TEST")
+print(f"Mode: {'Partial (--max-test ' + str(MAX_TEST) + ')' if MAX_TEST > 0 else 'Full Suite'}")
 print("=" * 60)
 
 # Test 1: Login
 print("\n[TEST 1] Login Endpoint")
 print("-" * 60)
-login_resp = requests.post('http://localhost:8000/auth/login', json={'email': 'rajesh@test.com', 'password': 'test1234'})
+login_resp = req_post('http://localhost:8000/auth/login', json={'email': 'rajesh@test.com', 'password': 'test1234'})
 print(f"Status Code: {login_resp.status_code}")
 if login_resp.status_code == 200:
     login_data = login_resp.json()
@@ -23,13 +63,14 @@ if login_resp.status_code == 200:
 else:
     print(f"✗ Login Failed: {login_resp.text}")
     token = None
+maybe_stop(1)
 
 # Test 2: Get Current User
 print("\n[TEST 2] Get Current User")
 print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
-    user_resp = requests.get('http://localhost:8000/auth/me', headers=headers)
+    user_resp = req_get('http://localhost:8000/auth/me', headers=headers)
     print(f"Status Code: {user_resp.status_code}")
     if user_resp.status_code == 200:
         print(f"✓ Get User Successful: {user_resp.json()}")
@@ -37,11 +78,12 @@ if token:
         print(f"✗ Get User Failed: {user_resp.text}")
 else:
     print("⚠ Skipped (token unavailable)")
+maybe_stop(2)
 
 # Test 3: Get Feeds
 print("\n[TEST 3] Get Feeds Endpoint")
 print("-" * 60)
-feeds_resp = requests.get('http://localhost:8000/feeds')
+feeds_resp = req_get('http://localhost:8000/feeds')
 print(f"Status Code: {feeds_resp.status_code}")
 if feeds_resp.status_code == 200:
     feeds = feeds_resp.json()
@@ -50,11 +92,12 @@ if feeds_resp.status_code == 200:
         print(f"First feed: {feeds[0]}")
 else:
     print(f"✗ Get Feeds Failed: {feeds_resp.text}")
+maybe_stop(3)
 
 # Test 4: Get Accessories
 print("\n[TEST 4] Get Accessories Endpoint")
 print("-" * 60)
-acc_resp = requests.get('http://localhost:8000/accessories')
+acc_resp = req_get('http://localhost:8000/accessories')
 print(f"Status Code: {acc_resp.status_code}")
 if acc_resp.status_code == 200:
     accessories = acc_resp.json()
@@ -67,7 +110,7 @@ else:
 # Test 5: Get Merchandise
 print("\n[TEST 5] Get Merchandise Endpoint")
 print("-" * 60)
-merch_resp = requests.get('http://localhost:8000/merchandise')
+merch_resp = req_get('http://localhost:8000/merchandise')
 print(f"Status Code: {merch_resp.status_code}")
 if merch_resp.status_code == 200:
     merchandise = merch_resp.json()
@@ -76,6 +119,7 @@ if merch_resp.status_code == 200:
         print(f"First item: {merchandise[0]}")
 else:
     print(f"✗ Get Merchandise Failed: {merch_resp.text}")
+maybe_stop(5)
 
 # Test 6: Add to Cart
 print("\n[TEST 6] Add to Cart (Authenticated)")
@@ -83,7 +127,7 @@ print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
     cart_data = {'product_type': 'accessory', 'product_id': 1, 'quantity': 2, 'size': None, 'color': None}
-    cart_resp = requests.post('http://localhost:8000/cart', json=cart_data, headers=headers)
+    cart_resp = req_post('http://localhost:8000/cart', json=cart_data, headers=headers)
     print(f"Status Code: {cart_resp.status_code}")
     if cart_resp.status_code == 200:
         print(f"✓ Add to Cart Successful: {cart_resp.json()}")
@@ -97,7 +141,7 @@ print("\n[TEST 7] Get Cart (Authenticated)")
 print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
-    get_cart_resp = requests.get('http://localhost:8000/cart', headers=headers)
+    get_cart_resp = req_get('http://localhost:8000/cart', headers=headers)
     print(f"Status Code: {get_cart_resp.status_code}")
     if get_cart_resp.status_code == 200:
         cart = get_cart_resp.json()
@@ -115,7 +159,7 @@ print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
     feed_data = {'title': 'Test Adventure', 'content': 'Had an amazing trip!', 'image_url': None}
-    create_feed_resp = requests.post('http://localhost:8000/feeds', json=feed_data, headers=headers)
+    create_feed_resp = req_post('http://localhost:8000/feeds', json=feed_data, headers=headers)
     print(f"Status Code: {create_feed_resp.status_code}")
     if create_feed_resp.status_code == 200:
         print(f"✓ Create Feed Successful: {create_feed_resp.json()}")
@@ -130,13 +174,13 @@ print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
     # Get cart first to know what item to delete
-    get_cart_resp = requests.get('http://localhost:8000/cart', headers=headers)
+    get_cart_resp = req_get('http://localhost:8000/cart', headers=headers)
     if get_cart_resp.status_code == 200:
         cart_items = get_cart_resp.json()
         if cart_items:
             item_id = cart_items[0]['id']
             print(f"Attempting to delete cart item ID: {item_id}")
-            delete_resp = requests.delete(f'http://localhost:8000/cart/{item_id}', headers=headers)
+            delete_resp = req_delete(f'http://localhost:8000/cart/{item_id}', headers=headers)
             print(f"Status Code: {delete_resp.status_code}")
             if delete_resp.status_code == 200:
                 print(f"✓ Delete from Cart Successful: {delete_resp.json()}")
@@ -152,7 +196,7 @@ else:
 # Test 10: Club Membership Requests should require auth
 print("\n[TEST 10] Club Membership Requests Require Auth")
 print("-" * 60)
-club_req_unauth_resp = requests.get('http://localhost:8000/memberships/club-requests')
+club_req_unauth_resp = req_get('http://localhost:8000/memberships/club-requests')
 print(f"Status Code: {club_req_unauth_resp.status_code}")
 if club_req_unauth_resp.status_code == 401:
     print("✓ Unauthenticated club requests correctly blocked (401)")
@@ -162,7 +206,7 @@ else:
 # Test 11: TBLR Applications should require auth
 print("\n[TEST 11] TBLR Applications Require Auth")
 print("-" * 60)
-tblr_unauth_resp = requests.get('http://localhost:8000/memberships/tblr-applications')
+tblr_unauth_resp = req_get('http://localhost:8000/memberships/tblr-applications')
 print(f"Status Code: {tblr_unauth_resp.status_code}")
 if tblr_unauth_resp.status_code == 401:
     print("✓ Unauthenticated TBLR applications correctly blocked (401)")
@@ -181,7 +225,7 @@ club_payload = {
     "registration_date": "2024-01-01T00:00:00",
     "reason": "Testing unauthenticated membership submit"
 }
-club_submit_unauth_resp = requests.post(
+club_submit_unauth_resp = req_post(
     'http://localhost:8000/memberships/club-requests',
     json=club_payload
 )
@@ -196,7 +240,7 @@ print("\n[TEST 13] Get Club Membership Requests (Authenticated)")
 print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
-    club_req_resp = requests.get('http://localhost:8000/memberships/club-requests', headers=headers)
+    club_req_resp = req_get('http://localhost:8000/memberships/club-requests', headers=headers)
     print(f"Status Code: {club_req_resp.status_code}")
     if club_req_resp.status_code == 200:
         club_reqs = club_req_resp.json()
@@ -213,7 +257,7 @@ print("\n[TEST 14] Get TBLR Applications (Authenticated)")
 print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
-    tblr_resp = requests.get('http://localhost:8000/memberships/tblr-applications', headers=headers)
+    tblr_resp = req_get('http://localhost:8000/memberships/tblr-applications', headers=headers)
     print(f"Status Code: {tblr_resp.status_code}")
     if tblr_resp.status_code == 200:
         tblr_apps = tblr_resp.json()
@@ -241,19 +285,19 @@ if token:
     }
 
     # First, check if there are existing requests and clean up
-    existing_requests = requests.get('http://localhost:8000/memberships/club-requests', headers=headers)
+    existing_requests = req_get('http://localhost:8000/memberships/club-requests', headers=headers)
     if existing_requests.status_code == 200:
         for req in existing_requests.json():
             if req['status'] in ['PENDING', 'APPROVED']:
                 # Delete existing request to clean up test state
-                delete_resp = requests.delete(
+                delete_resp = req_delete(
                     f'http://localhost:8000/memberships/club-requests/{req["id"]}',
                     headers=headers
                 )
                 print(f"Cleaned up existing {req['status']} request (ID: {req['id']})")
 
     # Now test duplicate blocking
-    first_submit = requests.post(
+    first_submit = req_post(
         'http://localhost:8000/memberships/club-requests',
         headers=headers,
         json=membership_payload
@@ -261,7 +305,7 @@ if token:
     print(f"First submit status: {first_submit.status_code}")
 
     if first_submit.status_code == 200:
-        second_submit = requests.post(
+        second_submit = req_post(
             'http://localhost:8000/memberships/club-requests',
             headers=headers,
             json=membership_payload
@@ -280,7 +324,7 @@ else:
 # Test 16: Verify Accessories Data Populated
 print("\n[TEST 16] Verify Accessories Data Populated")
 print("-" * 60)
-acc_resp = requests.get('http://localhost:8000/accessories')
+acc_resp = req_get('http://localhost:8000/accessories')
 if acc_resp.status_code == 200:
     accessories = acc_resp.json()
     if len(accessories) >= 4:
@@ -295,7 +339,7 @@ else:
 # Test 17: Verify Merchandise Data Populated
 print("\n[TEST 17] Verify Merchandise Data Populated")
 print("-" * 60)
-merch_resp = requests.get('http://localhost:8000/merchandise')
+merch_resp = req_get('http://localhost:8000/merchandise')
 if merch_resp.status_code == 200:
     merchandise = merch_resp.json()
     if len(merchandise) >= 4:
@@ -310,7 +354,7 @@ else:
 # Test 18: Get Single Accessory
 print("\n[TEST 18] Get Single Accessory Detail")
 print("-" * 60)
-acc_detail_resp = requests.get('http://localhost:8000/accessories/1')
+acc_detail_resp = req_get('http://localhost:8000/accessories/1')
 print(f"Status Code: {acc_detail_resp.status_code}")
 if acc_detail_resp.status_code == 200:
     accessory = acc_detail_resp.json()
@@ -321,7 +365,7 @@ else:
 # Test 19: Get Single Merchandise
 print("\n[TEST 19] Get Single Merchandise Detail")
 print("-" * 60)
-merch_detail_resp = requests.get('http://localhost:8000/merchandise/1')
+merch_detail_resp = req_get('http://localhost:8000/merchandise/1')
 print(f"Status Code: {merch_detail_resp.status_code}")
 if merch_detail_resp.status_code == 200:
     merchandise = merch_detail_resp.json()
@@ -333,10 +377,10 @@ else:
 print("\n[TEST 20] Get Single Feed Detail")
 print("-" * 60)
 # First get list of feeds to get an ID
-feeds_list = requests.get('http://localhost:8000/feeds')
+feeds_list = req_get('http://localhost:8000/feeds')
 if feeds_list.status_code == 200 and feeds_list.json():
     feed_id = feeds_list.json()[0]['id']
-    feed_detail_resp = requests.get(f'http://localhost:8000/feeds/{feed_id}')
+    feed_detail_resp = req_get(f'http://localhost:8000/feeds/{feed_id}')
     print(f"Status Code: {feed_detail_resp.status_code}")
     if feed_detail_resp.status_code == 200:
         feed = feed_detail_resp.json()
@@ -351,11 +395,11 @@ print("\n[TEST 21] Add Comment to Feed (Authenticated)")
 print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
-    feeds_list = requests.get('http://localhost:8000/feeds')
+    feeds_list = req_get('http://localhost:8000/feeds')
     if feeds_list.status_code == 200 and feeds_list.json():
         feed_id = feeds_list.json()[0]['id']
         comment_data = {'content': 'Great adventure! Thanks for sharing.'}
-        comment_resp = requests.post(
+        comment_resp = req_post(
             f'http://localhost:8000/feeds/{feed_id}/comments',
             json=comment_data,
             headers=headers
@@ -373,10 +417,10 @@ else:
 # Test 22: Get Feed Comments
 print("\n[TEST 22] Get Feed Comments")
 print("-" * 60)
-feeds_list = requests.get('http://localhost:8000/feeds')
+feeds_list = req_get('http://localhost:8000/feeds')
 if feeds_list.status_code == 200 and feeds_list.json():
     feed_id = feeds_list.json()[0]['id']
-    comments_resp = requests.get(f'http://localhost:8000/feeds/{feed_id}/comments')
+    comments_resp = req_get(f'http://localhost:8000/feeds/{feed_id}/comments')
     print(f"Status Code: {comments_resp.status_code}")
     if comments_resp.status_code == 200:
         comments = comments_resp.json()
@@ -391,7 +435,7 @@ print("\n[TEST 23] Clear Entire Cart (Authenticated)")
 print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
-    clear_resp = requests.delete('http://localhost:8000/cart', headers=headers)
+    clear_resp = req_delete('http://localhost:8000/cart', headers=headers)
     print(f"Status Code: {clear_resp.status_code}")
     if clear_resp.status_code == 200:
         print(f"✓ Clear Cart Successful: {clear_resp.json()}")
@@ -405,10 +449,10 @@ print("\n[TEST 24] Get Single Club Membership Request (Authenticated)")
 print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
-    requests_list = requests.get('http://localhost:8000/memberships/club-requests', headers=headers)
+    requests_list = req_get('http://localhost:8000/memberships/club-requests', headers=headers)
     if requests_list.status_code == 200 and requests_list.json():
         request_id = requests_list.json()[0]['id']
-        detail_resp = requests.get(
+        detail_resp = req_get(
             f'http://localhost:8000/memberships/club-requests/{request_id}',
             headers=headers
         )
@@ -436,7 +480,7 @@ if token:
         "experience_level": "intermediate",
         "motivation": "Want to explore off-road trails"
     }
-    tblr_submit_resp = requests.post(
+    tblr_submit_resp = req_post(
         'http://localhost:8000/memberships/tblr-applications',
         json=tblr_payload,
         headers=headers
@@ -454,10 +498,10 @@ print("\n[TEST 26] Get Single TBLR Application (Authenticated)")
 print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
-    tblr_list = requests.get('http://localhost:8000/memberships/tblr-applications', headers=headers)
+    tblr_list = req_get('http://localhost:8000/memberships/tblr-applications', headers=headers)
     if tblr_list.status_code == 200 and tblr_list.json():
         app_id = tblr_list.json()[0]['id']
-        tblr_detail_resp = requests.get(
+        tblr_detail_resp = req_get(
             f'http://localhost:8000/memberships/tblr-applications/{app_id}',
             headers=headers
         )
@@ -474,7 +518,7 @@ else:
 # Test 27: Admin Login for Approval Tests
 print("\n[TEST 27] Admin Login")
 print("-" * 60)
-admin_login_resp = requests.post('http://localhost:8000/auth/login', json={'email': 'admin@test.com', 'password': 'admin1234'})
+admin_login_resp = req_post('http://localhost:8000/auth/login', json={'email': 'admin@test.com', 'password': 'test1234'})
 print(f"Status Code: {admin_login_resp.status_code}")
 if admin_login_resp.status_code == 200:
     admin_data = admin_login_resp.json()
@@ -490,7 +534,7 @@ print("-" * 60)
 if admin_token:
     admin_headers = {'Authorization': f'Bearer {admin_token}'}
     # Get list of pending requests (as admin we can see all)
-    all_requests = requests.get('http://localhost:8000/memberships/club-requests', headers=admin_headers)
+    all_requests = req_get('http://localhost:8000/memberships/club-requests', headers=admin_headers)
     if all_requests.status_code == 200 and all_requests.json():
         pending_requests = [r for r in all_requests.json() if r['status'] == 'PENDING']
         if pending_requests:
@@ -517,7 +561,7 @@ print("-" * 60)
 if admin_token:
     admin_headers = {'Authorization': f'Bearer {admin_token}'}
     # Try to find another pending request, or create one with a new user
-    all_requests = requests.get('http://localhost:8000/memberships/club-requests', headers=admin_headers)
+    all_requests = req_get('http://localhost:8000/memberships/club-requests', headers=admin_headers)
     if all_requests.status_code == 200 and all_requests.json():
         pending_requests = [r for r in all_requests.json() if r['status'] == 'PENDING']
         if pending_requests:
@@ -541,10 +585,10 @@ if admin_token:
                 "phone": "7777777777",
                 "password": "test1234"
             }
-            register_resp = requests.post('http://localhost:8000/auth/register', json=new_user_data)
+            register_resp = req_post('http://localhost:8000/auth/register', json=new_user_data)
             if register_resp.status_code == 200:
                 # Login as new user
-                login_resp = requests.post('http://localhost:8000/auth/login', 
+                login_resp = req_post('http://localhost:8000/auth/login', 
                     json={'email': new_user_data['email'], 'password': new_user_data['password']})
                 if login_resp.status_code == 200:
                     new_user_token = login_resp.json()['access_token']
@@ -559,7 +603,7 @@ if admin_token:
                         "registration_date": "2024-01-01T00:00:00",
                         "reason": "Testing reject workflow"
                     }
-                    create_resp = requests.post(
+                    create_resp = req_post(
                         'http://localhost:8000/memberships/club-requests',
                         json=membership_payload,
                         headers=new_user_headers
@@ -585,15 +629,13 @@ if admin_token:
         print("⚠ Skipped (could not retrieve requests)")
 else:
     print("⚠ Skipped (admin token unavailable)")
-else:
-    print("⚠ Skipped (admin token unavailable)")
 
 # Test 30: Non-Admin Cannot Approve (403 Test)
 print("\n[TEST 30] Non-Admin Cannot Approve (403 Expected)")
 print("-" * 60)
 if token:
     user_headers = {'Authorization': f'Bearer {token}'}
-    all_requests = requests.get('http://localhost:8000/memberships/club-requests', headers=user_headers)
+    all_requests = req_get('http://localhost:8000/memberships/club-requests', headers=user_headers)
     if all_requests.status_code == 200 and all_requests.json():
         request_id = all_requests.json()[0]['id']
         forbidden_resp = requests.patch(
@@ -621,11 +663,14 @@ if token:
         "title": "2024 Mahindra Thar Test",
         "description": "Well maintained Thar for sale",
         "price": 15.5,
+        "year": "2024",
+        "mileage": "12000",
+        "location": "Bengaluru",
         "vehicle_model": "Mahindra Thar",
         "vehicle_number": "KA-01-TEST-9999",
         "image_url": "https://example.com/thar.jpg"
     }
-    create_listing_resp = requests.post(
+    create_listing_resp = req_post(
         'http://localhost:8000/buy-sell/listings',
         json=listing_data,
         headers=headers
@@ -646,7 +691,7 @@ else:
 # Test 32: Get All Listings (Buy/Sell)
 print("\n[TEST 32] Get All Listings (Buy/Sell)")
 print("-" * 60)
-list_resp = requests.get('http://localhost:8000/buy-sell/listings')
+list_resp = req_get('http://localhost:8000/buy-sell/listings')
 print(f"Status Code: {list_resp.status_code}")
 if list_resp.status_code == 200:
     listings = list_resp.json()
@@ -661,7 +706,7 @@ print("\n[TEST 33] Get My Listings (Buy/Sell - Authenticated)")
 print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
-    my_listings_resp = requests.get(
+    my_listings_resp = req_get(
         'http://localhost:8000/buy-sell/listings/my',
         headers=headers
     )
@@ -684,7 +729,7 @@ if token and test31_success:
     update_data = {
         "title": "2024 Mahindra Thar - Updated Price",
         "price": 14.5,
-        "status": "ACTIVE"
+        "status": "active"
     }
     update_resp = requests.patch(
         f'http://localhost:8000/buy-sell/listings/{test31_listing_id}',
@@ -704,7 +749,7 @@ else:
 print("\n[TEST 35] Get Single Listing Detail")
 print("-" * 60)
 if test31_success:
-    detail_resp = requests.get(f'http://localhost:8000/buy-sell/listings/{test31_listing_id}')
+    detail_resp = req_get(f'http://localhost:8000/buy-sell/listings/{test31_listing_id}')
     print(f"Status Code: {detail_resp.status_code}")
     if detail_resp.status_code == 200:
         listing_detail = detail_resp.json()
@@ -720,7 +765,7 @@ print("\n[TEST 36] Delete Listing (Buy/Sell - Soft Delete)")
 print("-" * 60)
 if token and test31_success:
     headers = {'Authorization': f'Bearer {token}'}
-    delete_resp = requests.delete(
+    delete_resp = req_delete(
         f'http://localhost:8000/buy-sell/listings/{test31_listing_id}',
         headers=headers
     )
@@ -728,7 +773,7 @@ if token and test31_success:
     if delete_resp.status_code == 204:
         print(f"✓ Delete Listing Successful (soft delete)")
         # Verify listing is now marked as DELETED
-        verify_resp = requests.get(f'http://localhost:8000/buy-sell/listings/{test31_listing_id}')
+        verify_resp = req_get(f'http://localhost:8000/buy-sell/listings/{test31_listing_id}')
         if verify_resp.status_code == 404:
             print(f"✓ Deleted listing no longer accessible in active listings")
         else:
@@ -749,10 +794,13 @@ if token:
         "title": "Thar for Non-Owner Test",
         "description": "Testing ownership check",
         "price": 12.0,
+        "year": "2023",
+        "mileage": "18000",
+        "location": "Bengaluru",
         "vehicle_model": "Mahindra Thar",
         "vehicle_number": "KA-02-OWNER-1111"
     }
-    create_resp = requests.post(
+    create_resp = req_post(
         'http://localhost:8000/buy-sell/listings',
         json=listing_data,
         headers=headers
@@ -791,7 +839,7 @@ social_test_data = {
     "email": "socialtestgoogle@test.com",
     "name": "Social Test Google"
 }
-social_resp = requests.post(
+social_resp = req_post(
     'http://localhost:8000/auth/social-login',
     json=social_test_data
 )
@@ -815,7 +863,7 @@ social_test_data = {
     "email": "socialtestapple@test.com",
     "name": "Social Test Apple"
 }
-social_resp = requests.post(
+social_resp = req_post(
     'http://localhost:8000/auth/social-login',
     json=social_test_data
 )
@@ -834,7 +882,7 @@ social_test_data = {
     "email": "socialtestfb@test.com",
     "name": "Social Test Facebook"
 }
-social_resp = requests.post(
+social_resp = req_post(
     'http://localhost:8000/auth/social-login',
     json=social_test_data
 )
@@ -849,7 +897,7 @@ print("\n[TEST 41] User Response Includes Membership Status Fields")
 print("-" * 60)
 if token:
     headers = {'Authorization': f'Bearer {token}'}
-    user_details_resp = requests.get('http://localhost:8000/auth/me', headers=headers)
+    user_details_resp = req_get('http://localhost:8000/auth/me', headers=headers)
     print(f"Status Code: {user_details_resp.status_code}")
     if user_details_resp.status_code == 200:
         user = user_details_resp.json()
@@ -875,10 +923,13 @@ listing_data = {
     "title": "Unauthorized Listing Attempt",
     "description": "Should fail",
     "price": 10.0,
+    "year": "2022",
+    "mileage": "25000",
+    "location": "Bengaluru",
     "vehicle_model": "Mahindra Thar",
     "vehicle_number": "KA-99-UNAUTH-9999"
 }
-unauth_resp = requests.post(
+unauth_resp = req_post(
     'http://localhost:8000/buy-sell/listings',
     json=listing_data
 )
@@ -891,7 +942,7 @@ else:
 # Test 43: Unauthenticated User CAN View Listings (Public Endpoint)
 print("\n[TEST 43] Unauthenticated User CAN View Listings (Public)")
 print("-" * 60)
-public_listings_resp = requests.get('http://localhost:8000/buy-sell/listings')
+public_listings_resp = req_get('http://localhost:8000/buy-sell/listings')
 print(f"Status Code: {public_listings_resp.status_code}")
 if public_listings_resp.status_code == 200:
     print(f"✓ Public listing view available: {len(public_listings_resp.json())} listings")
@@ -908,10 +959,13 @@ if admin_token and token:
         "title": "Admin Management Test Listing",
         "description": "For admin testing",
         "price": 20.0,
+        "year": "2021",
+        "mileage": "30000",
+        "location": "Bengaluru",
         "vehicle_model": "Mahindra Thar",
         "vehicle_number": "KA-03-ADMIN-2222"
     }
-    create_resp = requests.post(
+    create_resp = req_post(
         'http://localhost:8000/buy-sell/listings',
         json=listing_data,
         headers=headers
@@ -922,7 +976,7 @@ if admin_token and token:
         
         # Admin can view it
         admin_headers = {'Authorization': f'Bearer {admin_token}'}
-        admin_view_resp = requests.get(
+        admin_view_resp = req_get(
             f'http://localhost:8000/buy-sell/listings/{admin_test_listing_id}',
             headers=admin_headers
         )
@@ -944,7 +998,7 @@ invalid_social_data = {
     "email": "test@test.com",
     "name": "Test User"
 }
-invalid_resp = requests.post(
+invalid_resp = req_post(
     'http://localhost:8000/auth/social-login',
     json=invalid_social_data
 )
@@ -957,11 +1011,11 @@ else:
 # Test 46: Listing Detail Returns Seller Information
 print("\n[TEST 46] Listing Detail - Seller Information")
 print("-" * 60)
-list_resp = requests.get('http://localhost:8000/buy-sell/listings')
+list_resp = req_get('http://localhost:8000/buy-sell/listings')
 if list_resp.status_code == 200 and list_resp.json():
     first_listing = list_resp.json()[0]
     listing_id = first_listing.get('id')
-    detail_resp = requests.get(f'http://localhost:8000/buy-sell/listings/{listing_id}')
+    detail_resp = req_get(f'http://localhost:8000/buy-sell/listings/{listing_id}')
     if detail_resp.status_code == 200:
         listing = detail_resp.json()
         seller = listing.get('seller')
@@ -978,10 +1032,10 @@ else:
 # Test 47: Only ACTIVE Listings Shown by Default
 print("\n[TEST 47] Only ACTIVE Listings Shown by Default")
 print("-" * 60)
-list_resp = requests.get('http://localhost:8000/buy-sell/listings')
+list_resp = req_get('http://localhost:8000/buy-sell/listings')
 if list_resp.status_code == 200:
     listings = list_resp.json()
-    non_active = [l for l in listings if l.get('status') != 'ACTIVE']
+    non_active = [l for l in listings if str(l.get('status', '')).lower() != 'active']
     if non_active:
         print(f"✗ Found {len(non_active)} non-ACTIVE listings in default view")
     else:
@@ -989,8 +1043,149 @@ if list_resp.status_code == 200:
 else:
     print(f"✗ Could not get listings: {list_resp.text}")
 
+# Test 48: Member Discovery List (UC004)
+print("\n[TEST 48] Member Discovery - List Members")
+print("-" * 60)
+uc004_member_id = None
+if token:
+    headers = {'Authorization': f'Bearer {token}'}
+    members_resp = req_get('http://localhost:8000/members', headers=headers)
+    print(f"Status Code: {members_resp.status_code}")
+    if members_resp.status_code == 200:
+        members = members_resp.json()
+        print(f"✓ Member discovery successful: {len(members)} members found")
+        if members:
+            uc004_member_id = members[0].get('id')
+            print(f"First member: {members[0].get('name')} (ID: {uc004_member_id})")
+    else:
+        print(f"✗ Member discovery failed: {members_resp.text}")
+else:
+    print("⚠ Skipped (token unavailable)")
+maybe_stop(48)
+
+# Test 49: Member Profile Detail (UC004)
+print("\n[TEST 49] Member Discovery - Member Profile Detail")
+print("-" * 60)
+if token and uc004_member_id:
+    headers = {'Authorization': f'Bearer {token}'}
+    profile_resp = req_get(f'http://localhost:8000/members/{uc004_member_id}', headers=headers)
+    print(f"Status Code: {profile_resp.status_code}")
+    if profile_resp.status_code == 200:
+        profile = profile_resp.json()
+        print(f"✓ Member profile retrieved: {profile.get('name')}")
+        print(f"  Vehicles listed: {len(profile.get('vehicles', []))}")
+    else:
+        print(f"✗ Member profile retrieval failed: {profile_resp.text}")
+else:
+    print("⚠ Skipped (token/member ID unavailable)")
+maybe_stop(49)
+
+# Test 50: Vehicle Add and List (UC004)
+print("\n[TEST 50] Vehicle Management - Add & List My Vehicles")
+print("-" * 60)
+uc004_vehicle_id = None
+if token:
+    headers = {'Authorization': f'Bearer {token}'}
+    vehicle_payload = {
+        "make": "Mahindra",
+        "model": "Thar Roxx",
+        "year": "2024",
+        "registration_number": "KA-05-UC004-5050",
+        "color": "Black",
+        "mileage": 5000,
+        "is_primary": False,
+    }
+    add_vehicle_resp = req_post('http://localhost:8000/members/vehicles', headers=headers, json=vehicle_payload)
+    print(f"Add Vehicle Status: {add_vehicle_resp.status_code}")
+    if add_vehicle_resp.status_code == 200:
+        uc004_vehicle_id = add_vehicle_resp.json().get('id')
+        print(f"✓ Vehicle added successfully: ID = {uc004_vehicle_id}")
+    else:
+        print(f"✗ Vehicle add failed: {add_vehicle_resp.text}")
+
+    list_vehicles_resp = req_get('http://localhost:8000/members/vehicles/user', headers=headers)
+    print(f"List Vehicles Status: {list_vehicles_resp.status_code}")
+    if list_vehicles_resp.status_code == 200:
+        print(f"✓ Retrieved {len(list_vehicles_resp.json())} vehicles")
+    else:
+        print(f"✗ Vehicle list failed: {list_vehicles_resp.text}")
+else:
+    print("⚠ Skipped (token unavailable)")
+maybe_stop(50)
+
+# Test 51: Vehicle Update and Delete (UC004)
+print("\n[TEST 51] Vehicle Management - Update & Delete")
+print("-" * 60)
+if token and uc004_vehicle_id:
+    headers = {'Authorization': f'Bearer {token}'}
+    update_vehicle_payload = {
+        "color": "Desert Sand",
+        "mileage": 5500,
+    }
+    update_vehicle_resp = req_put(
+        f'http://localhost:8000/members/vehicles/{uc004_vehicle_id}',
+        headers=headers,
+        json=update_vehicle_payload,
+    )
+    print(f"Update Vehicle Status: {update_vehicle_resp.status_code}")
+    if update_vehicle_resp.status_code == 200:
+        print(f"✓ Vehicle updated successfully")
+    else:
+        print(f"✗ Vehicle update failed: {update_vehicle_resp.text}")
+
+    delete_vehicle_resp = req_delete(f'http://localhost:8000/members/vehicles/{uc004_vehicle_id}', headers=headers)
+    print(f"Delete Vehicle Status: {delete_vehicle_resp.status_code}")
+    if delete_vehicle_resp.status_code == 204:
+        print("✓ Vehicle deleted successfully")
+    else:
+        print(f"✗ Vehicle delete failed: {delete_vehicle_resp.text}")
+else:
+    print("⚠ Skipped (token/vehicle ID unavailable)")
+maybe_stop(51)
+
+# Test 52: Messaging - Send Message (UC004)
+print("\n[TEST 52] Messaging - Send Message")
+print("-" * 60)
+if token and uc004_member_id:
+    headers = {'Authorization': f'Bearer {token}'}
+    msg_payload = {
+        "receiver_id": uc004_member_id,
+        "content": "UC004 integration test message",
+    }
+    send_msg_resp = req_post('http://localhost:8000/messages', headers=headers, json=msg_payload)
+    print(f"Status Code: {send_msg_resp.status_code}")
+    if send_msg_resp.status_code == 200:
+        print("✓ Message sent successfully")
+    else:
+        print(f"✗ Message send failed: {send_msg_resp.text}")
+else:
+    print("⚠ Skipped (token/member ID unavailable)")
+maybe_stop(52)
+
+# Test 53: Messaging - Conversation and Conversations List (UC004)
+print("\n[TEST 53] Messaging - Conversation History & Conversations")
+print("-" * 60)
+if token and uc004_member_id:
+    headers = {'Authorization': f'Bearer {token}'}
+    conv_resp = req_get(f'http://localhost:8000/messages/conversation/{uc004_member_id}', headers=headers)
+    print(f"Conversation Status: {conv_resp.status_code}")
+    if conv_resp.status_code == 200:
+        print(f"✓ Conversation fetched: {len(conv_resp.json())} messages")
+    else:
+        print(f"✗ Conversation fetch failed: {conv_resp.text}")
+
+    conversations_resp = req_get('http://localhost:8000/messages/conversations', headers=headers)
+    print(f"Conversations Status: {conversations_resp.status_code}")
+    if conversations_resp.status_code == 200:
+        print(f"✓ Conversations list fetched: {len(conversations_resp.json())} threads")
+    else:
+        print(f"✗ Conversations list failed: {conversations_resp.text}")
+else:
+    print("⚠ Skipped (token/member ID unavailable)")
+maybe_stop(53)
+
 print("\n" + "=" * 60)
-print("INTEGRATION TESTS COMPLETE - All 47 Tests Executed")
+print("INTEGRATION TESTS COMPLETE - All 53 Tests Executed")
 print("=" * 60)
 print("\nENDPOINT COVERAGE:")
 print("✓ Auth: login, get current user, social-login (Google/Apple/Facebook)")
@@ -1002,7 +1197,13 @@ print("✓ Club Membership: submit, list, detail, approve, reject, auth checks")
 print("✓ TBLR: submit, list, detail, auth checks")
 print("✓ Admin Role: approve/reject workflows, 403 for non-admin")
 print("✓ Buy/Sell: create, list, list my, detail, update, delete (soft), ownership checks")
+print("✓ UC004 Member Discovery: list members, member profile detail")
+print("✓ UC004 Vehicle Management: add, list, update, delete")
+print("✓ UC004 Messaging: send message, conversation history, conversations list")
 print("✓ Social Auth: Google, Apple, Facebook endpoints validated")
 print("✓ User Response: membership_status, tblr_membership_status fields included")
 print("✓ Authorization: guest 401 on protected, non-owner 403 on update, public access for lists")
 print("=" * 60)
+
+# Clean up session
+session.close()

@@ -20,6 +20,23 @@ class User(Base):
     phone = Column(String(15), nullable=True)
     password_hash = Column(String(255), nullable=False)
     role = Column(Enum(UserRole), default=UserRole.USER)
+    
+    # UC003: Email verification and account status
+    email_verified = Column(Boolean, default=False)
+    is_banned = Column(Boolean, default=False)
+    
+    # UC003: Login attempt tracking for cooldown
+    failed_login_attempts = Column(Integer, default=0)
+    last_failed_login_at = Column(DateTime, nullable=True)
+    
+    # UC003: OTP management for email verification
+    email_verification_otp = Column(String(6), nullable=True)
+    email_verification_otp_expires_at = Column(DateTime, nullable=True)
+    
+    # UC003: OTP management for password reset
+    password_reset_otp = Column(String(6), nullable=True)
+    password_reset_otp_expires_at = Column(DateTime, nullable=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -29,6 +46,9 @@ class User(Base):
     membership_requests = relationship("ClubMembershipRequest", back_populates="user")
     tblr_applications = relationship("TBLRMembership", back_populates="user")
     cart_items = relationship("CartItem", back_populates="user")
+    vehicles = relationship("Vehicle", back_populates="owner")
+    sent_messages = relationship("Message", foreign_keys="Message.sender_id", back_populates="sender")
+    received_messages = relationship("Message", foreign_keys="Message.receiver_id", back_populates="receiver")
 
 
 class Feed(Base):
@@ -187,3 +207,38 @@ class Listing(Base):
     
     # Relationships
     seller = relationship("User", backref="listings")
+
+class Vehicle(Base):
+    """UC004: User vehicle details and preferences."""
+    __tablename__ = "vehicles"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    make = Column(String(100), nullable=False)  # e.g., "Mahindra"
+    model = Column(String(100), nullable=False)  # e.g., "Thar"
+    year = Column(String(4), nullable=True)
+    registration_number = Column(String(50), nullable=True)
+    color = Column(String(50), nullable=True)
+    mileage = Column(Float, nullable=True)
+    is_primary = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    owner = relationship("User", back_populates="vehicles")
+
+
+class Message(Base):
+    """UC004: In-app chat messages between members."""
+    __tablename__ = "messages"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    receiver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    sender = relationship("User", foreign_keys=[sender_id], back_populates="sent_messages")
+    receiver = relationship("User", foreign_keys=[receiver_id], back_populates="received_messages")

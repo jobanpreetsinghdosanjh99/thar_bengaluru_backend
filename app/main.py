@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import create_tables
 from app.seed import seed_data
-from app.routes import auth, feeds, accessories, merchandise, membership, tblr, cart, buy_sell
+from app.routes import auth, feeds, accessories, merchandise, membership, tblr, cart, buy_sell, members, messages
 
 # Create FastAPI app
 app = FastAPI(
@@ -37,6 +37,9 @@ app.include_router(membership.router)
 app.include_router(tblr.router)
 app.include_router(cart.router)
 app.include_router(buy_sell.router)
+app.include_router(buy_sell.router, prefix="/buy-sell")
+app.include_router(members.router)
+app.include_router(messages.router)
 
 
 @app.get("/", tags=["health"])
