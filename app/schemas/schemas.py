@@ -400,6 +400,105 @@ class PaymentResponse(BaseModel):
         from_attributes = True
 
 
+# ==================== UC004D: ACCESSORIES SHOPPING & VENDOR INTEGRATION SCHEMAS ====================
+
+class VendorResponse(BaseModel):
+    """Vendor information for order summaries."""
+    id: int
+    name: str
+    email: str
+    whatsapp_number: str
+    payment_gateway: str
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AccessoryDetailResponse(BaseModel):
+    """Enhanced accessory response with vendor details."""
+    id: int
+    vendor_id: int
+    name: str
+    description: str
+    long_description: Optional[str]
+    category: str
+    price: float
+    image_url: Optional[str]
+    images: Optional[str]  # JSON list
+    stock: int
+    features: Optional[str]  # JSON list
+    compatibility: Optional[str]
+    brand: Optional[str]
+    rating: float
+    reviews_count: int
+    is_featured: bool
+    vendor: VendorResponse
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+class AccessoryOrderItemResponse(BaseModel):
+    """Item in an accessory order."""
+    id: int
+    accessory_id: int
+    quantity: int
+    unit_price: float
+    total_price: float
+    accessory: Optional[AccessoryDetailResponse] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class AccessoryOrderCheckout(BaseModel):
+    """Request to checkout accessories from cart."""
+    items: List[CartItemCreate]  # Cart items to purchase
+    customer_name: str
+    customer_email: str
+    customer_phone: str
+    shipping_address: str
+
+
+class AccessoryOrderResponse(BaseModel):
+    """Complete order response."""
+    id: int
+    order_number: str
+    customer_name: str
+    customer_email: str
+    customer_phone: str
+    shipping_address: str
+    total_amount: float
+    currency: str
+    payment_gateway: str
+    payment_id: Optional[str]
+    order_id: Optional[str]
+    payment_status: str
+    order_status: str
+    vendor_notification_sent: bool
+    vendor: VendorResponse
+    items: List[AccessoryOrderItemResponse]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AccessoryOrderPaymentRedirect(BaseModel):
+    """Response with vendor payment gateway redirect URL."""
+    order_id: int
+    order_number: str
+    gateway_redirect_url: str
+    payment_id: Optional[str]
+    amount: float
+    currency: str
+
+
 class PaymentVerify(BaseModel):
     """UC004B: Verify payment from gateway callback."""
     gateway_payment_id: str

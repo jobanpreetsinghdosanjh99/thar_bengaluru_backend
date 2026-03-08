@@ -166,6 +166,30 @@ def get_current_user(authorization: Optional[str] = Header(None), db: Session = 
     return user
 
 
+def get_optional_current_user(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> Optional[User]:
+    """Dependency to optionally get current user. Used for endpoints that support both guest and authenticated access."""
+    if not authorization:
+        return None
+    
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            return None
+    except ValueError:
+        return None
+    
+    payload = decode_access_token(token)
+    if payload is None:
+        return None
+    
+    user_id: str = payload.get("sub")
+    if user_id is None:
+        return None
+    
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    return user
+
+
 @router.get("/me", response_model=UserResponse)
 def get_current_user_info(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get current user info with membership statuses."""

@@ -105,19 +105,52 @@ class FeedLike(Base):
     user = relationship("User", backref="feed_likes")
 
 
+class Vendor(Base):
+    """UC004D: Vendors who sell 4x4 accessories."""
+    __tablename__ = "vendors"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=False)
+    whatsapp_number = Column(String(15), nullable=False)  # International format
+    payment_gateway = Column(String(50), nullable=False)  # e.g., "razorpay", "custom"
+    payment_gateway_key = Column(String(500), nullable=True)  # API key for payment gateway
+    payment_gateway_url = Column(String(500), nullable=True)  # Redirect URL for payment
+    status = Column(String(20), default="active")  # "active", "inactive"
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    accessories = relationship("Accessory", back_populates="vendor", cascade="all, delete-orphan")
+    orders = relationship("AccessoryOrder", back_populates="vendor")
+
+
 class Accessory(Base):
     """4x4 Accessories/Products."""
     __tablename__ = "accessories"
     
     id = Column(Integer, primary_key=True, index=True)
+    vendor_id = Column(Integer, ForeignKey("vendors.id"), nullable=False)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
-    category = Column(String(100), nullable=False)  # e.g., "Tires", "Suspension"
+    long_description = Column(Text, nullable=True)
+    category = Column(String(100), nullable=False)  # e.g., "Recovery Gear", "Lighting", "Suspension"
     price = Column(Float, nullable=False)
     image_url = Column(String(500), nullable=True)
+    images = Column(String(2000), nullable=True)  # JSON list of image URLs
     stock = Column(Integer, default=0)
+    features = Column(String(2000), nullable=True)  # JSON list of features
+    compatibility = Column(String(500), nullable=True)  # Compatible vehicle types
+    brand = Column(String(100), nullable=True)
+    rating = Column(Float, default=0.0)
+    reviews_count = Column(Integer, default=0)
+    is_featured = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    vendor = relationship("Vendor", back_populates="accessories")
+    order_items = relationship("AccessoryOrderItem", back_populates="accessory")
 
 
 class Merchandise(Base):
@@ -383,3 +416,63 @@ class Payment(Base):
     # Relationships
     user = relationship("User", backref="payments")
     event = relationship("Event", backref="payments")
+
+
+# ==================== UC004D: ACCESSORIES SHOPPING & VENDOR INTEGRATION ====================
+
+class OrderStatus(str, enum.Enum):
+    PENDING = "pending"
+    PAYMENT_SUCCESS = "payment_success"
+    PAYMENT_FAILED = "payment_failed"
+    VENDOR_NOTIFIED = "vendor_notified"
+    CANCELLED = "cancelled"
+
+
+class AccessoryOrder(Base):
+    """UC004D: Orders for purchasing accessories through vendors."""
+    __tablename__ = "accessory_orders"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Nullable for guest checkout
+    vendor_id = Column(Integer, ForeignKey("vendors.id"), nullable=False)
+    order_number = Column(String(50), unique=True, nullable=False)  # e.g., ORD-20260208-001
+    customer_name = Column(String(255), nullable=False)
+    customer_email = Column(String(255), nullable=False)
+    customer_phone = Column(String(15), nullable=False)
+    shipping_address = Column(Text, nullable=False)
+    total_amount = Column(Float, nullable=False)
+    currency = Column(String(3), default="INR")
+    payment_gateway = Column(String(50), nullable=False)  # e.g., "razorpay"
+    payment_id = Column(String(255), nullable=True)  # External payment ID from vendor gateway
+    order_id = Column(String(255), nullable=True)  # External order ID from vendor gateway
+    payment_status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDING)
+    order_status = Column(Enum(OrderStatus), default=OrderStatus.PENDING)
+    vendor_notification_sent = Column(Boolean, default=False)
+    vendor_notification_email_sent = Column(Boolean, default=False)
+    vendor_notification_whatsapp_sent = Column(Boolean, default=False)
+    user_confirmation_sent = Column(Boolean, default=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", backref="accessory_orders")
+    vendor = relationship("Vendor", back_populates="orders")
+    items = relationship("AccessoryOrderItem", back_populates="order", cascade="all, delete-orphan")
+
+
+class AccessoryOrderItem(Base):
+    """UC004D: Individual items in an accessory order."""
+    __tablename__ = "accessory_order_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("accessory_orders.id"), nullable=False)
+    accessory_id = Column(Integer, ForeignKey("accessories.id"), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    unit_price = Column(Float, nullable=False)  # Price at time of order
+    total_price = Column(Float, nullable=False)  # quantity * unit_price
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    order = relationship("AccessoryOrder", back_populates="items")
+    accessory = relationship("Accessory", back_populates="order_items")
