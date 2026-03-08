@@ -117,7 +117,7 @@ def checkout_accessories(
         total_amount = sum(accessory.price * quantity for accessory, quantity in items_with_stock)
         
         # Create order
-        order_number = generate_order_number("ACCS", db)
+        order_number = generate_order_number("ACCS")
         order = AccessoryOrder(
             user_id=current_user.id if current_user else None,
             vendor_id=first_vendor.id,
@@ -188,7 +188,7 @@ def payment_success(order_id: int, db: Session = Depends(get_db)):
             return {"message": "Order already processed"}
         
         # Process payment success using utility
-        result = process_payment_success(order, db, product_type="Accessory")
+        result = process_payment_success(order, db)
         
         # Send vendor notifications
         notify_vendor_complete(order.vendor, prepare_order_summary(order), "Accessory")

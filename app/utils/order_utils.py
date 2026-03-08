@@ -4,7 +4,7 @@ Centralized order processing logic for accessories and merchandise.
 """
 
 from datetime import datetime
-from typing import List, Dict, Any, Union
+from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 
@@ -23,9 +23,16 @@ def generate_order_number(prefix: str) -> str:
         >>> generate_order_number("ACCS")
         "ACCS-20260308-0001"
     """
+    valid_prefixes = {"ACCS", "MERCH"}
+    if prefix not in valid_prefixes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid order prefix '{prefix}'. Expected one of: {', '.join(sorted(valid_prefixes))}."
+        )
+
     date_str = datetime.now().strftime("%Y%m%d")
-    timestamp = datetime.now().strftime("%H%M%S")
-    counter = int(timestamp) % 10000  # Use timestamp for uniqueness
+    # Use microseconds to reduce collision risk for rapid successive checkouts.
+    counter = int(datetime.now().strftime("%f")) % 10000
     return f"{prefix}-{date_str}-{counter:04d}"
 
 

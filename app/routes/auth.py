@@ -11,6 +11,14 @@ from app.config import settings
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
+def _club_membership_status_value(membership: Optional[ClubMembershipRequest]) -> Optional[str]:
+    if not membership:
+        return None
+    if membership.status == MembershipStatus.APPROVED:
+        return "active" if membership.payment_status == "success" else "approved_payment_pending"
+    return membership.status.value
+
+
 @router.post("/register", response_model=UserResponse)
 def register(user_data: UserRegister, db: Session = Depends(get_db)):
     """
@@ -120,7 +128,7 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         email=user.email,
         phone=user.phone,
         role=user.role.value if user.role else "user",
-        membership_status=club_membership.status.value if club_membership else None,
+        membership_status=_club_membership_status_value(club_membership),
         tblr_membership_status=tblr_membership.status.value if tblr_membership else None,
         created_at=user.created_at
     )
@@ -211,7 +219,7 @@ def get_current_user_info(current_user: User = Depends(get_current_user), db: Se
         "email": current_user.email,
         "phone": current_user.phone,
         "role": current_user.role.value if current_user.role else "user",
-        "membership_status": club_membership.status.value if club_membership else None,
+        "membership_status": _club_membership_status_value(club_membership),
         "tblr_membership_status": tblr_membership.status.value if tblr_membership else None,
         "created_at": current_user.created_at
     }
@@ -267,7 +275,7 @@ def update_profile(
         "preferences": current_user.preferences,
         "profile_photo": current_user.profile_photo,
         "role": current_user.role.value if current_user.role else "user",
-        "membership_status": club_membership.status.value if club_membership else None,
+        "membership_status": _club_membership_status_value(club_membership),
         "tblr_membership_status": tblr_membership.status.value if tblr_membership else None,
         "created_at": current_user.created_at
     }
@@ -347,7 +355,7 @@ def social_login(auth_data: SocialAuthLogin, db: Session = Depends(get_db)):
         email=user.email,
         phone=user.phone,
         role=user.role.value if user.role else "user",
-        membership_status=club_membership.status.value if club_membership else None,
+        membership_status=_club_membership_status_value(club_membership),
         tblr_membership_status=tblr_membership.status.value if tblr_membership else None,
         created_at=user.created_at
     )

@@ -15,7 +15,8 @@ router = APIRouter(prefix="/feeds", tags=["feeds"])
 def _has_active_club_membership(user_id: int, db: Session) -> bool:
     membership = db.query(ClubMembershipRequest).filter(
         ClubMembershipRequest.user_id == user_id,
-        ClubMembershipRequest.status == MembershipStatus.APPROVED
+        ClubMembershipRequest.status == MembershipStatus.APPROVED,
+        ClubMembershipRequest.payment_status == "success"
     ).order_by(ClubMembershipRequest.created_at.desc()).first()
     return membership is not None
 

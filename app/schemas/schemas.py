@@ -284,6 +284,64 @@ class ClubMembershipRequestCreate(BaseModel):
     registration_date: datetime
     reason: str
 
+    # UC005: additional profile and document fields
+    residential_address: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    vehicle_fuel_type: Optional[str] = None
+    vehicle_transmission_type: Optional[str] = None
+    profile_photo_url: Optional[str] = None
+    rc_document_url: Optional[str] = None
+    insurance_document_url: Optional[str] = None
+    aadhaar_document_url: Optional[str] = None
+    driving_license_document_url: Optional[str] = None
+    vehicle_modifications: Optional[str] = None
+    additional_info: Optional[str] = None
+    terms_accepted: bool = False
+
+
+class ClubMembershipAutofillResponse(BaseModel):
+    tb_member_id: str
+    first_name: str
+    last_name: str
+    mobile_number: str
+    email_address: str
+    residential_address: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    vehicle_make_model: Optional[str] = None
+    vehicle_fuel_type: Optional[str] = None
+    vehicle_transmission_type: Optional[str] = None
+    vehicle_registration_number: Optional[str] = None
+    profile_photo_url: Optional[str] = None
+    rc_document_url: Optional[str] = None
+
+
+class ClubMembershipEligibilityResponse(BaseModel):
+    eligible: bool
+    reasons: List[str] = []
+    workshop_trail_completed: bool
+    membership_window_open: bool
+    has_existing_membership: bool
+    has_pending_request: bool
+
+
+class ClubMembershipPaymentResponse(BaseModel):
+    request_id: int
+    payment_status: str
+    payment_gateway: Optional[str] = None
+    payment_order_id: Optional[str] = None
+    payment_url: Optional[str] = None
+    message: str
+
+
+class ClubMembershipActivationResponse(BaseModel):
+    request_id: int
+    membership_id: Optional[str] = None
+    membership_status: str
+    whatsapp_group_name: Optional[str] = None
+    whatsapp_group_link: Optional[str] = None
+    whatsapp_join_available: bool = False
+    message: str
+
 
 class ClubMembershipRequestResponse(BaseModel):
     id: int
@@ -295,6 +353,19 @@ class ClubMembershipRequestResponse(BaseModel):
     registration_date: datetime
     reason: str
     status: str
+    payment_status: Optional[str] = None
+    payment_link_enabled: Optional[bool] = None
+    membership_id: Optional[str] = None
+    whatsapp_group_name: Optional[str] = None
+    whatsapp_group_link: Optional[str] = None
+    whatsapp_join_available: Optional[bool] = None
+    rejection_reason: Optional[str] = None
+    residential_address: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    vehicle_fuel_type: Optional[str] = None
+    vehicle_transmission_type: Optional[str] = None
+    terms_accepted: Optional[bool] = None
+    workshop_trail_completed: Optional[bool] = None
     created_at: datetime
     updated_at: datetime
     

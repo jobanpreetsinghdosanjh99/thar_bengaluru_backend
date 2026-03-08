@@ -543,7 +543,7 @@ def checkout_merchandise(
             total_amount += price * quantity
         
         # Create order
-        order_number = generate_order_number("MERCH", db)
+        order_number = generate_order_number("MERCH")
         order = MerchandiseOrder(
             user_id=current_user.id if current_user else None,
             vendor_id=first_vendor.id,
@@ -620,7 +620,7 @@ def merchandise_payment_success(order_id: int, db: Session = Depends(get_db)):
             return {"message": "Order already processed"}
         
         # Process payment success using utility
-        result = process_payment_success(order, db, product_type="Merchandise")
+        result = process_payment_success(order, db)
         
         # Send vendor notifications
         notify_vendor_complete(order.vendor, prepare_order_summary(order), "Merchandise")

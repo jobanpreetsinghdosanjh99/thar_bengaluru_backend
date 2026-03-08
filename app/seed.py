@@ -113,6 +113,59 @@ def seed_data():
         except Exception as vendor_backfill_error:
             db.rollback()
             print(f"[Seed] UC004E merchandise vendor backfill issue: {vendor_backfill_error}")
+
+        # UC005: Ensure club membership request table has full application lifecycle columns
+        try:
+            db.execute(text("SELECT payment_status, membership_id, whatsapp_group_link, terms_accepted FROM club_membership_requests LIMIT 1"))
+            print("[Check] UC005 membership columns already exist")
+        except Exception:
+            db.rollback()
+            try:
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS residential_address TEXT"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS emergency_contact VARCHAR(15)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS vehicle_fuel_type VARCHAR(20)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS vehicle_transmission_type VARCHAR(20)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS profile_photo_url VARCHAR(500)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS rc_document_url VARCHAR(500)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS insurance_document_url VARCHAR(500)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS aadhaar_document_url VARCHAR(500)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS driving_license_document_url VARCHAR(500)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS vehicle_modifications TEXT"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS additional_info TEXT"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS terms_accepted BOOLEAN DEFAULT FALSE"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS workshop_trail_completed BOOLEAN DEFAULT FALSE"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS payment_status VARCHAR(20) DEFAULT 'pending'"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS payment_gateway VARCHAR(50)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS payment_order_id VARCHAR(255)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS payment_id VARCHAR(255)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS payment_link_enabled BOOLEAN DEFAULT FALSE"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS approved_by_admin_id INTEGER"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS rejection_reason TEXT"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS membership_id VARCHAR(100)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS whatsapp_group_name VARCHAR(255)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS whatsapp_group_link VARCHAR(500)"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS whatsapp_join_available BOOLEAN DEFAULT FALSE"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS activated_at TIMESTAMP"))
+                db.execute(text("ALTER TABLE club_membership_requests ADD COLUMN IF NOT EXISTS audit_log TEXT"))
+                db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_club_membership_requests_membership_id ON club_membership_requests (membership_id)"))
+
+                # Keep existing approved users active for current platform features.
+                db.execute(text("UPDATE club_membership_requests SET payment_status = 'success' WHERE status = 'APPROVED' AND (payment_status IS NULL OR payment_status = 'pending')"))
+                db.execute(text("UPDATE club_membership_requests SET payment_link_enabled = TRUE WHERE status = 'APPROVED'"))
+                db.commit()
+                print("[Migration] Added missing UC005 membership lifecycle columns")
+            except Exception as migration_error:
+                db.rollback()
+                print(f"[Migration] UC005 membership column migration issue: {migration_error}")
+
+        # Ensure previously approved records remain active after UC005 rollout.
+        try:
+            db.execute(text("UPDATE club_membership_requests SET payment_status = 'success' WHERE status = 'APPROVED' AND (payment_status IS NULL OR payment_status IN ('', 'pending'))"))
+            db.execute(text("UPDATE club_membership_requests SET payment_link_enabled = TRUE WHERE status = 'APPROVED'"))
+            db.commit()
+        except Exception:
+            db.rollback()
         
         # Check if accessories/merchandise exist
         accessories_count = db.execute(text("SELECT COUNT(*) as count FROM accessories")).fetchone()

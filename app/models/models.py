@@ -49,7 +49,11 @@ class User(Base):
     # Relationships
     feeds = relationship("Feed", back_populates="author")
     comments = relationship("FeedComment", back_populates="author")
-    membership_requests = relationship("ClubMembershipRequest", back_populates="user")
+    membership_requests = relationship(
+        "ClubMembershipRequest",
+        back_populates="user",
+        foreign_keys="ClubMembershipRequest.user_id"
+    )
     tblr_applications = relationship("TBLRMembership", back_populates="user")
     cart_items = relationship("CartItem", back_populates="user")
     vehicles = relationship("Vehicle", back_populates="owner")
@@ -204,12 +208,48 @@ class ClubMembershipRequest(Base):
     vehicle_number = Column(String(50), nullable=False)
     registration_date = Column(DateTime, nullable=False)
     reason = Column(Text, nullable=False)
+
+    # UC005: Auto-filled and editable membership profile fields
+    residential_address = Column(Text, nullable=True)
+    emergency_contact = Column(String(15), nullable=True)
+    vehicle_fuel_type = Column(String(20), nullable=True)  # petrol/diesel
+    vehicle_transmission_type = Column(String(20), nullable=True)  # manual/automatic
+    profile_photo_url = Column(String(500), nullable=True)
+    rc_document_url = Column(String(500), nullable=True)
+    insurance_document_url = Column(String(500), nullable=True)
+    aadhaar_document_url = Column(String(500), nullable=True)
+    driving_license_document_url = Column(String(500), nullable=True)
+    vehicle_modifications = Column(Text, nullable=True)
+    additional_info = Column(Text, nullable=True)
+    terms_accepted = Column(Boolean, default=False)
+    workshop_trail_completed = Column(Boolean, default=False)
+
+    # UC005: Admin review and payment/activation lifecycle
     status = Column(Enum(MembershipStatus), default=MembershipStatus.PENDING)
+    payment_status = Column(String(20), default="pending")  # pending/success/failed
+    payment_gateway = Column(String(50), nullable=True)
+    payment_order_id = Column(String(255), nullable=True)
+    payment_id = Column(String(255), nullable=True)
+    payment_link_enabled = Column(Boolean, default=False)
+    approved_by_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+
+    # UC005: Membership activation artifacts
+    membership_id = Column(String(100), unique=True, nullable=True)
+    whatsapp_group_name = Column(String(255), nullable=True)
+    whatsapp_group_link = Column(String(500), nullable=True)
+    whatsapp_join_available = Column(Boolean, default=False)
+    activated_at = Column(DateTime, nullable=True)
+
+    # UC005: Basic audit trail (JSON string)
+    audit_log = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    user = relationship("User", back_populates="membership_requests")
+    user = relationship("User", back_populates="membership_requests", foreign_keys=[user_id])
+    approved_by_admin = relationship("User", foreign_keys=[approved_by_admin_id])
 
 
 class TBLRMembership(Base):
