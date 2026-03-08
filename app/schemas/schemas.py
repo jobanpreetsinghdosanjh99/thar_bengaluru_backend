@@ -124,29 +124,154 @@ class AccessoryResponse(BaseModel):
 
 # ==================== MERCHANDISE SCHEMAS ====================
 class MerchandiseCreate(BaseModel):
+    vendor_id: int
     name: str
     description: str
+    long_description: Optional[str] = None
+    category: str  # "Apparel", "Stickers", "Accessories", etc.
     price: float
     image_url: Optional[str] = None
-    sizes: Optional[str] = None  # JSON string: '["S", "M", "L"]'
-    colors: Optional[str] = None  # JSON string
+    images: Optional[str] = None  # JSON string: '["url1", "url2"]'
+    sizes: Optional[str] = None  # JSON string: '[{"id": "m", "size": "M", "label": "Medium"}]'
+    colors: Optional[str] = None  # JSON string: '[{"id": "red", "name": "Red", "hex": "#FF0000"}]'
     stock: int
+    features: Optional[str] = None  # JSON string: '["Feature 1", "Feature 2"]'
+    material: Optional[str] = None
+    brand: Optional[str] = None
+    rating: Optional[float] = 0.0
+    reviews: Optional[int] = 0
+    is_featured: Optional[bool] = False
+    is_on_sale: Optional[bool] = False
+    discounted_price: Optional[float] = None
 
 
 class MerchandiseResponse(BaseModel):
     id: int
+    vendor_id: Optional[int] = None
     name: str
     description: str
+    long_description: Optional[str] = None
+    category: Optional[str] = None
     price: float
-    image_url: Optional[str]
-    sizes: Optional[str]
-    colors: Optional[str]
+    image_url: Optional[str] = None
+    images: Optional[str] = None
+    sizes: Optional[str] = None
+    colors: Optional[str] = None
     stock: int
+    features: Optional[str] = None
+    material: Optional[str] = None
+    brand: Optional[str] = None
+    rating: Optional[float] = 0.0
+    reviews: Optional[int] = 0
+    is_featured: Optional[bool] = False
+    is_on_sale: Optional[bool] = False
+    discounted_price: Optional[float] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    vendor: Optional[dict] = None  # Vendor details if joined
     
     class Config:
         from_attributes = True
+
+
+class MerchandiseDetailResponse(BaseModel):
+    """Detailed merchandise response with vendor info."""
+    id: int
+    vendor_id: Optional[int] = None
+    name: str
+    description: str
+    long_description: Optional[str] = None
+    category: Optional[str] = None
+    price: float
+    image_url: Optional[str] = None
+    images: Optional[str] = None
+    sizes: Optional[str] = None
+    colors: Optional[str] = None
+    stock: int
+    features: Optional[str] = None
+    material: Optional[str] = None
+    brand: Optional[str] = None
+    rating: Optional[float] = 0.0
+    reviews: Optional[int] = 0
+    is_featured: Optional[bool] = False
+    is_on_sale: Optional[bool] = False
+    discounted_price: Optional[float] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    vendor: Optional[dict] = None
+    
+    class Config:
+        from_attributes = True
+
+
+# UC004E: Merchandise Checkout & Orders
+class MerchandiseCartItemCreate(BaseModel):
+    """Item in merchandise cart for checkout."""
+    merchandise_id: int
+    quantity: int
+    size: Optional[str] = None
+    color: Optional[str] = None
+
+
+class MerchandiseCheckout(BaseModel):
+    """Request to checkout merchandise order."""
+    items: List[MerchandiseCartItemCreate]
+    customer_name: str
+    customer_email: str
+    customer_phone: str
+    shipping_address: str
+    notes: Optional[str] = None
+
+
+class MerchandiseOrderItemResponse(BaseModel):
+    """Individual merchandise item in an order."""
+    id: int
+    merchandise_id: int
+    quantity: int
+    unit_price: float
+    total_price: float
+    selected_size: Optional[str] = None
+    selected_color: Optional[str] = None
+    merchandise: Optional[MerchandiseResponse] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class MerchandiseOrderResponse(BaseModel):
+    """Merchandise order details."""
+    id: int
+    order_number: str
+    customer_name: str
+    customer_email: str
+    customer_phone: str
+    shipping_address: str
+    total_amount: float
+    currency: str
+    payment_gateway: str
+    payment_status: str
+    order_status: str
+    vendor_notification_sent: bool
+    user_confirmation_sent: bool
+    notes: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    items: List[MerchandiseOrderItemResponse] = []
+    vendor: Optional[dict] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class MerchandiseOrderPaymentRedirect(BaseModel):
+    """Response after initiating merchandise order payment."""
+    order_id: int
+    order_number: str
+    payment_url: str
+    payment_gateway: str
+    gateway_order_id: Optional[str] = None
+    amount: float
+    currency: str
 
 
 # ==================== MEMBERSHIP SCHEMAS ====================

@@ -154,19 +154,35 @@ class Accessory(Base):
 
 
 class Merchandise(Base):
-    """Club merchandise items."""
+    """UC004E: Club merchandise items (apparel, stickers, accessories)."""
     __tablename__ = "merchandise"
     
     id = Column(Integer, primary_key=True, index=True)
+    vendor_id = Column(Integer, ForeignKey("vendors.id"), nullable=False)  # Vendor who sells this merchandise
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=False)
+    long_description = Column(Text, nullable=True)
+    category = Column(String(100), nullable=False)  # e.g., "Apparel", "Stickers", "Accessories"
     price = Column(Float, nullable=False)
-    image_url = Column(String(500), nullable=True)
-    sizes = Column(String(255), nullable=True)  # JSON: ["S", "M", "L", "XL"]
-    colors = Column(String(500), nullable=True)  # JSON: [{"name": "Red", "hex": "#FF0000"}]
+    image_url = Column(String(500), nullable=True)  # Primary image (backward compatible)
+    images = Column(String(2000), nullable=True)  # JSON list of image URLs
+    sizes = Column(String(500), nullable=True)  # JSON: [{"id": "m", "size": "M", "label": "Medium"}]
+    colors = Column(String(500), nullable=True)  # JSON: [{"id": "red", "name": "Red", "hex": "#FF0000"}]
     stock = Column(Integer, default=0)
+    features = Column(String(2000), nullable=True)  # JSON list of features
+    material = Column(String(100), nullable=True)  # e.g., "100% Cotton", "Polyester"
+    brand = Column(String(100), nullable=True)
+    rating = Column(Float, default=0.0)
+    reviews = Column(Integer, default=0)  # Number of reviews
+    is_featured = Column(Boolean, default=False)
+    is_on_sale = Column(Boolean, default=False)
+    discounted_price = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    vendor = relationship("Vendor", backref="merchandise")
+    order_items = relationship("MerchandiseOrderItem", back_populates="merchandise")
 
 
 class MembershipStatus(str, enum.Enum):
@@ -476,3 +492,57 @@ class AccessoryOrderItem(Base):
     # Relationships
     order = relationship("AccessoryOrder", back_populates="items")
     accessory = relationship("Accessory", back_populates="order_items")
+
+
+# ==================== UC004E: CLUB MERCHANDISE SHOPPING & VENDOR INTEGRATION ====================
+
+class MerchandiseOrder(Base):
+    """UC004E: Orders for purchasing club merchandise through vendors."""
+    __tablename__ = "merchandise_orders"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Nullable for guest checkout
+    vendor_id = Column(Integer, ForeignKey("vendors.id"), nullable=False)
+    order_number = Column(String(50), unique=True, nullable=False)  # e.g., MERCH-20260308-001
+    customer_name = Column(String(255), nullable=False)
+    customer_email = Column(String(255), nullable=False)
+    customer_phone = Column(String(15), nullable=False)
+    shipping_address = Column(Text, nullable=False)
+    total_amount = Column(Float, nullable=False)
+    currency = Column(String(3), default="INR")
+    payment_gateway = Column(String(50), nullable=False)  # e.g., "razorpay", "phonepe"
+    payment_id = Column(String(255), nullable=True)  # External payment ID from vendor gateway
+    order_id = Column(String(255), nullable=True)  # External order ID from vendor gateway
+    payment_status = Column(Enum(PaymentStatus), default=PaymentStatus.PENDING)
+    order_status = Column(Enum(OrderStatus), default=OrderStatus.PENDING)
+    vendor_notification_sent = Column(Boolean, default=False)
+    vendor_notification_email_sent = Column(Boolean, default=False)
+    vendor_notification_whatsapp_sent = Column(Boolean, default=False)
+    user_confirmation_sent = Column(Boolean, default=False)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", backref="merchandise_orders")
+    vendor = relationship("Vendor", backref="merchandise_orders_as_vendor")
+    items = relationship("MerchandiseOrderItem", back_populates="order", cascade="all, delete-orphan")
+
+
+class MerchandiseOrderItem(Base):
+    """UC004E: Individual items in a merchandise order."""
+    __tablename__ = "merchandise_order_items"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("merchandise_orders.id"), nullable=False)
+    merchandise_id = Column(Integer, ForeignKey("merchandise.id"), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    unit_price = Column(Float, nullable=False)  # Price at time of order
+    total_price = Column(Float, nullable=False)  # quantity * unit_price
+    selected_size = Column(String(50), nullable=True)  # e.g., "M"
+    selected_color = Column(String(50), nullable=True)  # e.g., "Red"
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    order = relationship("MerchandiseOrder", back_populates="items")
+    merchandise = relationship("Merchandise", back_populates="order_items")

@@ -77,6 +77,42 @@ def seed_data():
         except Exception as vendor_backfill_error:
             db.rollback()
             print(f"[Seed] UC004D vendor backfill issue: {vendor_backfill_error}")
+
+        # UC004E: Ensure merchandise table has required columns for vendor integration
+        try:
+            db.execute(text("SELECT vendor_id, long_description, category, images, features, material, brand, rating, reviews, is_featured, is_on_sale, discounted_price FROM merchandise LIMIT 1"))
+            print("[Check] UC004E merchandise columns already exist")
+        except Exception:
+            db.rollback()
+            try:
+                db.execute(text("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS vendor_id INTEGER"))
+                db.execute(text("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS long_description TEXT"))
+                db.execute(text("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Apparel'"))
+                db.execute(text("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS images VARCHAR(2000)"))
+                db.execute(text("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS features VARCHAR(2000)"))
+                db.execute(text("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS material VARCHAR(100)"))
+                db.execute(text("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS brand VARCHAR(100)"))
+                db.execute(text("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS rating FLOAT DEFAULT 0.0"))
+                db.execute(text("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS reviews INTEGER DEFAULT 0"))
+                db.execute(text("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE"))
+                db.execute(text("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS is_on_sale BOOLEAN DEFAULT FALSE"))
+                db.execute(text("ALTER TABLE merchandise ADD COLUMN IF NOT EXISTS discounted_price FLOAT"))
+                db.commit()
+                print("[Migration] Added missing UC004E merchandise columns")
+            except Exception as migration_error:
+                db.rollback()
+                print(f"[Migration] UC004E merchandise column migration issue: {migration_error}")
+
+        # UC004E: Ensure merchandise is linked to vendor (use same vendor as accessories)
+        try:
+            existing_vendor = db.execute(text("SELECT id FROM vendors ORDER BY id LIMIT 1")).fetchone()
+            if existing_vendor:
+                db.execute(text("UPDATE merchandise SET vendor_id = :vendor_id WHERE vendor_id IS NULL"), {"vendor_id": existing_vendor[0]})
+                db.commit()
+                print("[Seed] Backfilled vendor_id for existing merchandise")
+        except Exception as vendor_backfill_error:
+            db.rollback()
+            print(f"[Seed] UC004E merchandise vendor backfill issue: {vendor_backfill_error}")
         
         # Check if accessories/merchandise exist
         accessories_count = db.execute(text("SELECT COUNT(*) as count FROM accessories")).fetchone()
@@ -166,15 +202,50 @@ def seed_data():
         
         # Insert test merchandise (only if they don't exist)
         if merchandise_count.count == 0:
-            db.execute(text("""
-                INSERT INTO merchandise (name, description, price, stock, created_at) VALUES
-                ('Thar Club Classic Tee', 'Premium cotton t-shirt with club logo', 599, 156, NOW()),
-                ('Thar Adventure Hoodie', 'Comfortable hoodie for club members', 1299, 89, NOW()),
-                ('Thar Club Cap', 'Adjustable baseball cap', 349, 234, NOW()),
-                ('Off-Road Gloves', 'Professional off-road driving gloves', 799, 145, NOW())
+            # Get default vendor for merchandise
+            default_vendor = db.execute(text("SELECT id FROM vendors ORDER BY id LIMIT 1")).fetchone()
+            vendor_id = default_vendor[0] if default_vendor else 1
+            
+            db.execute(text(f"""
+                INSERT INTO merchandise 
+                (vendor_id, name, description, long_description, category, price, stock, image_url, images, sizes, colors, features, material, brand, rating, reviews, is_featured, is_on_sale, created_at, updated_at) 
+                VALUES
+                ({vendor_id}, 'Thar Club Classic Tee', 'Premium cotton t-shirt with club logo', 'High-quality cotton t-shirt featuring the official Thar Bengaluru club emblem. Perfect for casual outings and club events.', 'Apparel', 599, 156, 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=1200', 
+                '[\"https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=1200\",\"https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=1200\"]',
+                '[[\"id\":\"s\",\"size\":\"S\",\"label\":\"Small\"],[\"id\":\"m\",\"size\":\"M\",\"label\":\"Medium\"],[\"id\":\"l\",\"size\":\"L\",\"label\":\"Large\"],[\"id\":\"xl\",\"size\":\"XL\",\"label\":\"Extra Large\"]]',
+                '[[\"id\":\"black\",\"name\":\"Black\",\"hex\":\"#000000\"],[\"id\":\"white\",\"name\":\"White\",\"hex\":\"#FFFFFF\"],[\"id\":\"olive\",\"name\":\"Olive\",\"hex\":\"#556B2F\"]]',
+                '[\"100% premium cotton\",\"Screen-printed club logo\",\"Breathable fabric\",\"Pre-shrunk\"]',
+                '100% Cotton', 'Thar Club', 4.5, 120, true, false, NOW(), NOW()),
+                
+                ({vendor_id}, 'Thar Adventure Hoodie', 'Comfortable hoodie for club members', 'Warm and cozy hoodie with embroidered Thar logo. Perfect for trail adventures and cool evenings.', 'Hoodies', 1299, 89, 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=1200',
+                '[\"https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=1200\",\"https://images.unsplash.com/photo-1578587018452-892bacefd3f2?w=1200\"]',
+                '[[\"id\":\"s\",\"size\":\"S\",\"label\":\"Small\"],[\"id\":\"m\",\"size\":\"M\",\"label\":\"Medium\"],[\"id\":\"l\",\"size\":\"L\",\"label\":\"Large\"],[\"id\":\"xl\",\"size\":\"XL\",\"label\":\"Extra Large\"]]',
+                '[[\"id\":\"charcoal\",\"name\":\"Charcoal\",\"hex\":\"#36454F\"],[\"id\":\"navy\",\"name\":\"Navy\",\"hex\":\"#000080\"],[\"id\":\"maroon\",\"name\":\"Maroon\",\"hex\":\"#800000\"]]',
+                '[\"Fleece-lined interior\",\"Embroidered logo\",\"Kangaroo pocket\",\"Adjustable drawstring hood\"]',
+                'Cotton Blend', 'Thar Club', 4.7, 95, true, false, NOW(), NOW()),
+                
+                ({vendor_id}, 'Thar Club Cap', 'Adjustable baseball cap', 'Classic adjustable cap with woven Thar logo patch. Protects from sun during off-road adventures.', 'Caps', 349, 234, 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=1200',
+                '[\"https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=1200\"]',
+                NULL,
+                '[[\"id\":\"black\",\"name\":\"Black\",\"hex\":\"#000000\"],[\"id\":\"tan\",\"name\":\"Tan\",\"hex\":\"#D2B48C\"],[\"id\":\"camo\",\"name\":\"Camo\",\"hex\":\"#78866B\"]]',
+                '[\"Adjustable strap\",\"Woven logo patch\",\"UV protection\",\"Breathable mesh back\"]',
+                'Cotton Canvas', 'Thar Club', 4.3, 230, false, false, NOW(), NOW()),
+                
+                ({vendor_id}, 'Off-Road Gloves', 'Professional off-road driving gloves', 'Durable gloves designed for extreme trail conditions. Enhanced grip and palm protection for confident driving.', 'Accessories', 799, 145, 'https://images.unsplash.com/photo-1581345678689-0af13c93bb89?w=1200',
+                '[\"https://images.unsplash.com/photo-1581345678689-0af13c93bb89?w=1200\"]',
+                '[[\"id\":\"m\",\"size\":\"M\",\"label\":\"Medium\"],[\"id\":\"l\",\"size\":\"L\",\"label\":\"Large\"],[\"id\":\"xl\",\"size\":\"XL\",\"label\":\"Extra Large\"]]',
+                '[[\"id\":\"black\",\"name\":\"Black\",\"hex\":\"#000000\"]]',
+                '[\"Reinforced palm\",\"Breathable mesh\",\"Touchscreen compatible\",\"Padded knuckles\"]',
+                'Synthetic Leather', 'TrailGear Pro', 4.6, 87, true, false, NOW(), NOW()),
+                
+                ({vendor_id}, 'Thar Club Sticker Pack', 'Vinyl sticker collection', 'Set of 5 waterproof vinyl stickers featuring various Thar Club designs. Perfect for personalizing vehicles and gear.', 'Stickers', 149, 500, 'https://images.unsplash.com/photo-1572375992501-4b0892d50c69?w=1200',
+                '[\"https://images.unsplash.com/photo-1572375992501-4b0892d50c69?w=1200\"]',
+                NULL, NULL,
+                '[\"5 unique designs\",\"Waterproof vinyl\",\"UV resistant\",\"Easy peel backing\"]',
+                'Vinyl', 'Thar Club', 4.8, 312, false, true, NOW(), NOW())
             """))
             db.commit()
-            print(" Created 4 test merchandise items")
+            print(" Created 5 test merchandise items with UC004E fields")
         else:
             print(" Merchandise already exist, skipping merchandise creation")
         
