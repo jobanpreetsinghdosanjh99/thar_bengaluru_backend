@@ -4,7 +4,7 @@ Centralizes payment, notifications, order processing logic to avoid duplication.
 """
 
 from .order_utils import generate_order_number, validate_stock, prepare_order_summary
-from .notification_utils import send_vendor_email, send_vendor_whatsapp, send_user_confirmation
+from .notification_utils import send_vendor_email, send_vendor_whatsapp, send_user_confirmation, notify_vendor_complete
 from .payment_utils import create_payment_redirect, process_payment_success, process_payment_failure
 
 __all__ = [
@@ -17,6 +17,7 @@ __all__ = [
     "send_vendor_email",
     "send_vendor_whatsapp",
     "send_user_confirmation",
+    "notify_vendor_complete",
     
     # Payment utilities
     "create_payment_redirect",

@@ -3,8 +3,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional
 from datetime import datetime
-import requests
-import json
 from app.database import get_db
 from app.models.models import (
     Merchandise, Vendor, MerchandiseOrder, MerchandiseOrderItem, User, PaymentStatus, OrderStatus
@@ -15,6 +13,10 @@ from app.schemas.schemas import (
     MerchandiseOrderItemResponse
 )
 from app.routes.auth import get_current_user, get_optional_current_user
+from app.utils import (
+    generate_order_number, prepare_order_summary,
+    notify_vendor_complete, process_payment_success, process_payment_failure
+)
 
 router = APIRouter(prefix="/merchandise", tags=["merchandise"])
 
@@ -477,17 +479,6 @@ def create_merchandise(
 
 # ==================== UC004E: CHECKOUT & ORDERING ====================
 
-def _generate_merchandise_order_number(db: Session) -> str:
-    """Generate unique merchandise order number in format MERCH-YYYYMMDD-XXXX."""
-    date_str = datetime.utcnow().strftime("%Y%m%d")
-    # Get count of merchandise orders today
-    today = datetime.utcnow().date()
-    count = db.query(MerchandiseOrder).filter(
-        MerchandiseOrder.created_at >= datetime.combine(today, datetime.min.time())
-    ).count()
-    return f"MERCH-{date_str}-{count + 1:04d}"
-
-
 def _validate_merchandise_stock(items_data: List, db: Session) -> List[tuple]:
     """Validate stock availability for merchandise cart items. Returns list of (Merchandise, quantity, size, color) tuples."""
     item_list = []
@@ -552,7 +543,7 @@ def checkout_merchandise(
             total_amount += price * quantity
         
         # Create order
-        order_number = _generate_merchandise_order_number(db)
+        order_number = generate_order_number("MERCH", db)
         order = MerchandiseOrder(
             user_id=current_user.id if current_user else None,
             vendor_id=first_vendor.id,
@@ -628,18 +619,11 @@ def merchandise_payment_success(order_id: int, db: Session = Depends(get_db)):
         if order.payment_status == PaymentStatus.SUCCESS:
             return {"message": "Order already processed"}
         
-        # Update payment status
-        order.payment_status = PaymentStatus.SUCCESS
-        order.order_status = OrderStatus.PAYMENT_SUCCESS
+        # Process payment success using utility
+        result = process_payment_success(order, db, product_type="Merchandise")
         
-        # Update inventory (deduct stock)
-        for order_item in order.items:
-            order_item.merchandise.stock -= order_item.quantity
-        
-        db.commit()
-        
-        # Send vendor notifications (email + WhatsApp)
-        _send_merchandise_vendor_notifications(order, db)
+        # Send vendor notifications
+        notify_vendor_complete(order.vendor, prepare_order_summary(order), "Merchandise")
         
         # Mark notifications as sent
         order.vendor_notification_sent = True
@@ -647,7 +631,7 @@ def merchandise_payment_success(order_id: int, db: Session = Depends(get_db)):
         db.commit()
         
         return {
-            "message": "Payment successful and order confirmed",
+            "message": result["message"],
             "order_number": order.order_number,
             "order_id": order.id
         }
@@ -670,13 +654,11 @@ def merchandise_payment_failure(order_id: int, db: Session = Depends(get_db)):
         if not order:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
         
-        order.payment_status = PaymentStatus.FAILED
-        order.order_status = OrderStatus.PAYMENT_FAILED
-        
-        db.commit()
+        # Process payment failure using utility
+        result = process_payment_failure(order, db, failure_reason="Payment rejected by gateway")
         
         return {
-            "message": "Payment unsuccessful. No charges were made.",
+            "message": result["message"],
             "order_number": order.order_number
         }
     
@@ -687,72 +669,3 @@ def merchandise_payment_failure(order_id: int, db: Session = Depends(get_db)):
             detail=f"Payment failure processing failed: {str(e)}"
         )
 
-
-# ==================== UC004E: VENDOR NOTIFICATIONS ====================
-
-def _send_merchandise_vendor_notifications(order: MerchandiseOrder, db: Session) -> None:
-    """
-    UC004E: Send merchandise order details to vendor via Email and WhatsApp.
-    """
-    vendor = order.vendor
-    
-    # Prepare order summary
-    order_summary = _prepare_merchandise_order_summary(order)
-    
-    # Send Email notification
-    try:
-        _send_merchandise_email_notification(vendor, order, order_summary)
-        order.vendor_notification_email_sent = True
-    except Exception as e:
-        print(f"Email notification failed for vendor {vendor.id}: {str(e)}")
-    
-    # Send WhatsApp notification
-    try:
-        _send_merchandise_whatsapp_notification(vendor, order, order_summary)
-        order.vendor_notification_whatsapp_sent = True
-    except Exception as e:
-        print(f"WhatsApp notification failed for vendor {vendor.id}: {str(e)}")
-
-
-def _prepare_merchandise_order_summary(order: MerchandiseOrder) -> dict:
-    """Prepare merchandise order summary for notifications."""
-    items_list = []
-    for item in order.items:
-        item_details = {
-            "product": item.merchandise.name,
-            "quantity": item.quantity,
-            "unit_price": item.unit_price,
-            "total": item.total_price
-        }
-        if item.selected_size:
-            item_details["size"] = item.selected_size
-        if item.selected_color:
-            item_details["color"] = item.selected_color
-        items_list.append(item_details)
-    
-    return {
-        "order_number": order.order_number,
-        "customer_name": order.customer_name,
-        "customer_email": order.customer_email,
-        "customer_phone": order.customer_phone,
-        "shipping_address": order.shipping_address,
-        "items": items_list,
-        "total_amount": order.total_amount,
-        "notes": order.notes
-    }
-
-
-def _send_merchandise_email_notification(vendor: Vendor, order: MerchandiseOrder, order_summary: dict) -> None:
-    """Send merchandise order notification to vendor via email."""
-    # Placeholder for email service integration
-    # In production, integrate with actual email service (SendGrid, AWS SES, etc.)
-    print(f"[EMAIL] Sending merchandise order notification to {vendor.email}")
-    print(f"Order: {order_summary}")
-
-
-def _send_merchandise_whatsapp_notification(vendor: Vendor, order: MerchandiseOrder, order_summary: dict) -> None:
-    """Send merchandise order notification to vendor via WhatsApp."""
-    # Placeholder for WhatsApp service integration
-    # In production, integrate with actual WhatsApp Business API
-    print(f"[WHATSAPP] Sending merchandise order notification to {vendor.whatsapp_number}")
-    print(f"Order: {order_summary}")

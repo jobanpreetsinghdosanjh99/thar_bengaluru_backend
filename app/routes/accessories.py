@@ -2,8 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
-import requests
-import json
 from app.database import get_db
 from app.models.models import (
     Accessory, Vendor, AccessoryOrder, AccessoryOrderItem, CartItem, User, PaymentStatus, OrderStatus
@@ -13,6 +11,10 @@ from app.schemas.schemas import (
     AccessoryOrderPaymentRedirect, VendorResponse
 )
 from app.routes.auth import get_current_user, get_optional_current_user
+from app.utils import (
+    generate_order_number, prepare_order_summary,
+    notify_vendor_complete, process_payment_success, process_payment_failure
+)
 
 router = APIRouter(prefix="/accessories", tags=["accessories"])
 
@@ -56,23 +58,11 @@ def list_accessories(
 
 # ==================== UC004D: CHECKOUT & ORDERING ====================
 
-def _generate_order_number(db: Session) -> str:
-    """Generate unique order number in format ORD-YYYYMMDD-XXXX."""
-    from datetime import datetime
-    date_str = datetime.utcnow().strftime("%Y%m%d")
-    # Get count of orders today
-    today = datetime.utcnow().date()
-    count = db.query(AccessoryOrder).filter(
-        AccessoryOrder.created_at >= datetime.combine(today, datetime.min.time())
-    ).count()
-    return f"ORD-{date_str}-{count + 1:04d}"
-
-
-def _validate_stock(items_data: List, db: Session) -> List[tuple]:
-    """Validate stock availability for cart items. Returns list of (Accessory, quantity) tuples."""
+def _validate_accessory_stock(items_data: List, db: Session) -> List[tuple]:
+    """Validate stock availability for accessory cart items. Returns list of (Accessory, quantity) tuples."""
     item_list = []
     for item_data in items_data:
-        # Accept either dict payloads or Pydantic objects.
+        # Accept either dict payloads or Pydantic objects
         product_id = item_data.get("product_id") if isinstance(item_data, dict) else getattr(item_data, "product_id", None)
         quantity = item_data.get("quantity") if isinstance(item_data, dict) else getattr(item_data, "quantity", None)
 
@@ -86,7 +76,7 @@ def _validate_stock(items_data: List, db: Session) -> List[tuple]:
         if not accessory or accessory.stock < quantity:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"One or more items are no longer available or insufficient stock."
+                detail=f"Accessory '{accessory.name if accessory else product_id}' is no longer available or insufficient stock."
             )
         item_list.append((accessory, quantity))
     return item_list
@@ -104,7 +94,7 @@ def checkout_accessories(
     """
     try:
         # Validate stock before proceeding
-        items_with_stock = _validate_stock(checkout_data.items, db)
+        items_with_stock = _validate_accessory_stock(checkout_data.items, db)
         
         if not items_with_stock:
             raise HTTPException(
@@ -127,7 +117,7 @@ def checkout_accessories(
         total_amount = sum(accessory.price * quantity for accessory, quantity in items_with_stock)
         
         # Create order
-        order_number = _generate_order_number(db)
+        order_number = generate_order_number("ACCS", db)
         order = AccessoryOrder(
             user_id=current_user.id if current_user else None,
             vendor_id=first_vendor.id,
@@ -197,18 +187,11 @@ def payment_success(order_id: int, db: Session = Depends(get_db)):
         if order.payment_status == PaymentStatus.SUCCESS:
             return {"message": "Order already processed"}
         
-        # Update payment status
-        order.payment_status = PaymentStatus.SUCCESS
-        order.order_status = OrderStatus.PAYMENT_SUCCESS
+        # Process payment success using utility
+        result = process_payment_success(order, db, product_type="Accessory")
         
-        # Update inventory (deduct stock)
-        for order_item in order.items:
-            order_item.accessory.stock -= order_item.quantity
-        
-        db.commit()
-        
-        # Send vendor notifications (email + WhatsApp)
-        _send_vendor_notifications(order, db)
+        # Send vendor notifications
+        notify_vendor_complete(order.vendor, prepare_order_summary(order), "Accessory")
         
         # Mark notifications as sent
         order.vendor_notification_sent = True
@@ -216,7 +199,7 @@ def payment_success(order_id: int, db: Session = Depends(get_db)):
         db.commit()
         
         return {
-            "message": "Payment successful and order confirmed",
+            "message": result["message"],
             "order_number": order.order_number,
             "order_id": order.id
         }
@@ -239,13 +222,11 @@ def payment_failure(order_id: int, db: Session = Depends(get_db)):
         if not order:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
         
-        order.payment_status = PaymentStatus.FAILED
-        order.order_status = OrderStatus.PAYMENT_FAILED
-        
-        db.commit()
+        # Process payment failure using utility
+        result = process_payment_failure(order, db, failure_reason="Payment rejected by gateway")
         
         return {
-            "message": "Payment unsuccessful. No charges were made.",
+            "message": result["message"],
             "order_number": order.order_number
         }
     
@@ -255,133 +236,6 @@ def payment_failure(order_id: int, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Payment failure processing failed: {str(e)}"
         )
-
-
-# ==================== UC004D: VENDOR NOTIFICATIONS ====================
-
-def _send_vendor_notifications(order: AccessoryOrder, db: Session) -> None:
-    """
-    UC004D: Send order details to vendor via Email and WhatsApp.
-    """
-    vendor = order.vendor
-    
-    # Prepare order summary
-    order_summary = _prepare_order_summary(order)
-    
-    # Send Email notification
-    try:
-        _send_email_notification(vendor, order, order_summary)
-        order.vendor_notification_email_sent = True
-    except Exception as e:
-        print(f"Email notification failed for vendor {vendor.id}: {str(e)}")
-    
-    # Send WhatsApp notification
-    try:
-        _send_whatsapp_notification(vendor, order, order_summary)
-        order.vendor_notification_whatsapp_sent = True
-    except Exception as e:
-        print(f"WhatsApp notification failed for vendor {vendor.id}: {str(e)}")
-
-
-def _prepare_order_summary(order: AccessoryOrder) -> dict:
-    """Prepare order summary for notifications."""
-    items_list = []
-    for item in order.items:
-        items_list.append({
-            "product": item.accessory.name,
-            "quantity": item.quantity,
-            "unit_price": item.unit_price,
-            "total": item.total_price
-        })
-    
-    return {
-        "order_number": order.order_number,
-        "customer_name": order.customer_name,
-        "customer_email": order.customer_email,
-        "customer_phone": order.customer_phone,
-        "shipping_address": order.shipping_address,
-        "items": items_list,
-        "total_amount": order.total_amount,
-        "currency": order.currency,
-        "order_date": order.created_at.strftime("%Y-%m-%d %H:%M:%S")
-    }
-
-
-def _send_email_notification(vendor: Vendor, order: AccessoryOrder, summary: dict) -> None:
-    """
-    UC004D: Send email notification to vendor with order details and PDF invoice.
-    """
-    # In production, integrate with email service (SendGrid, AWS SES, etc.)
-    email_subject = f"New Order: {order.order_number}"
-    
-    items_html = "".join([
-        f"<tr><td>{item['product']}</td><td>{item['quantity']}</td>" 
-        f"<td>₹{item['unit_price']}</td><td>₹{item['total']}</td></tr>"
-        for item in summary['items']
-    ])
-    
-    html_content = f"""
-    <html>
-    <body>
-    <h2>New Order Received: {order.order_number}</h2>
-    
-    <h3>Customer Details:</h3>
-    <p>Name: {order.customer_name}</p>
-    <p>Email: {order.customer_email}</p>
-    <p>Phone: {order.customer_phone}</p>
-    <p>Shipping Address: {order.shipping_address}</p>
-    
-    <h3>Order Items:</h3>
-    <table border="1">
-    <tr><th>Product</th><th>Quantity</th><th>Unit Price</th><th>Total</th></tr>
-    {items_html}
-    </table>
-    
-    <h3>Total Amount: ₹{order.total_amount}</h3>
-    
-    <p><strong>Disclaimer:</strong> Thar Bengaluru functions only as an intermediary and does not assume responsibility 
-    for delivery timelines, product defects, wrong shipments, missing items, packaging damage, warranty disputes, 
-    installation concerns, or any other vendor-related issues.</p>
-    </body>
-    </html>
-    """
-    
-    # Simulate email sending
-    print(f"Email notification sent to {vendor.email}: {email_subject}")
-
-
-def _send_whatsapp_notification(vendor: Vendor, order: AccessoryOrder, summary: dict) -> None:
-    """
-    UC004D: Send WhatsApp notification to vendor with quick order summary.
-    """
-    # In production, integrate with WhatsApp Cloud API
-    items_text = "\n".join([
-        f"• {item['product']} (Qty: {item['quantity']}) - ₹{item['total']}"
-        for item in summary['items']
-    ])
-    
-    message = f"""
-    🎉 New Order Received! 📦
-
-Order ID: {order.order_number}
-Customer: {order.customer_name}
-Phone: {order.customer_phone}
-Email: {order.customer_email}
-
-📍 Shipping Address:
-{order.shipping_address}
-
-📦 Items:
-{items_text}
-
-💰 Total Amount: ₹{order.total_amount}
-✅ Payment: Confirmed
-
-💡 Disclaimer: Thar Bengaluru functions only as an intermediary.
-    """
-    
-    # Simulate WhatsApp sending
-    print(f"WhatsApp notification sent to {vendor.whatsapp_number}: {message}")
 
 
 # ==================== UC004D: ORDER HISTORY ====================
