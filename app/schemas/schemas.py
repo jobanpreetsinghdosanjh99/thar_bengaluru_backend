@@ -419,24 +419,24 @@ class VendorResponse(BaseModel):
 class AccessoryDetailResponse(BaseModel):
     """Enhanced accessory response with vendor details."""
     id: int
-    vendor_id: int
+    vendor_id: Optional[int] = None
     name: str
     description: str
-    long_description: Optional[str]
+    long_description: Optional[str] = None
     category: str
     price: float
-    image_url: Optional[str]
+    image_url: Optional[str] = None
     images: Optional[str]  # JSON list
     stock: int
     features: Optional[str]  # JSON list
-    compatibility: Optional[str]
-    brand: Optional[str]
+    compatibility: Optional[str] = None
+    brand: Optional[str] = None
     rating: float
     reviews_count: int
     is_featured: bool
-    vendor: VendorResponse
-    created_at: Optional[datetime]
-    updated_at: Optional[datetime]
+    vendor: Optional[VendorResponse] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -455,7 +455,7 @@ class AccessoryOrderItemResponse(BaseModel):
         from_attributes = True
 
 
-class AccessoryOrderCheckout(BaseModel):
+class AccessoryCheckout(BaseModel):
     """Request to checkout accessories from cart."""
     items: List[CartItemCreate]  # Cart items to purchase
     customer_name: str
@@ -494,7 +494,7 @@ class AccessoryOrderPaymentRedirect(BaseModel):
     order_id: int
     order_number: str
     gateway_redirect_url: str
-    payment_id: Optional[str]
+    payment_id: Optional[str] = None
     amount: float
     currency: str
 

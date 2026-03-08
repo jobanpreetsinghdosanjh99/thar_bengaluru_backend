@@ -54,15 +54,6 @@ def list_accessories(
     return accessories
 
 
-@router.get("/{accessory_id}", response_model=AccessoryDetailResponse)
-def get_accessory(accessory_id: int, db: Session = Depends(get_db)):
-    """Get single accessory details with vendor information."""
-    accessory = db.query(Accessory).filter(Accessory.id == accessory_id).first()
-    if not accessory:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Accessory not found")
-    return accessory
-
-
 # ==================== UC004D: CHECKOUT & ORDERING ====================
 
 def _generate_order_number(db: Session) -> str:
@@ -77,17 +68,27 @@ def _generate_order_number(db: Session) -> str:
     return f"ORD-{date_str}-{count + 1:04d}"
 
 
-def _validate_stock(items_data: List[dict], db: Session) -> List[tuple]:
+def _validate_stock(items_data: List, db: Session) -> List[tuple]:
     """Validate stock availability for cart items. Returns list of (Accessory, quantity) tuples."""
     item_list = []
     for item_data in items_data:
-        accessory = db.query(Accessory).filter(Accessory.id == item_data["product_id"]).first()
-        if not accessory or accessory.stock < item_data["quantity"]:
+        # Accept either dict payloads or Pydantic objects.
+        product_id = item_data.get("product_id") if isinstance(item_data, dict) else getattr(item_data, "product_id", None)
+        quantity = item_data.get("quantity") if isinstance(item_data, dict) else getattr(item_data, "quantity", None)
+
+        if product_id is None or quantity is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid cart item payload"
+            )
+
+        accessory = db.query(Accessory).filter(Accessory.id == product_id).first()
+        if not accessory or accessory.stock < quantity:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"One or more items are no longer available or insufficient stock."
             )
-        item_list.append((accessory, item_data["quantity"]))
+        item_list.append((accessory, quantity))
     return item_list
 
 
@@ -406,4 +407,13 @@ def get_user_orders(
         AccessoryOrder.user_id == current_user.id
     ).order_by(AccessoryOrder.created_at.desc()).offset(skip).limit(limit).all()
     return orders
+
+
+@router.get("/{accessory_id}", response_model=AccessoryDetailResponse)
+def get_accessory(accessory_id: int, db: Session = Depends(get_db)):
+    """Get single accessory details with vendor information."""
+    accessory = db.query(Accessory).filter(Accessory.id == accessory_id).first()
+    if not accessory:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Accessory not found")
+    return accessory
 

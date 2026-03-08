@@ -35,6 +35,48 @@ def seed_data():
             except Exception as migration_error:
                 db.rollback()
                 print(f"[Migration] Columns may already exist or migration issue: {migration_error}")
+
+        # Ensure UC004D accessory table has required columns for current model
+        try:
+            db.execute(text("SELECT vendor_id, long_description, images, features, compatibility, brand, rating, reviews_count, is_featured FROM accessories LIMIT 1"))
+            print("[Check] UC004D accessory columns already exist")
+        except Exception:
+            db.rollback()
+            try:
+                db.execute(text("ALTER TABLE accessories ADD COLUMN IF NOT EXISTS vendor_id INTEGER"))
+                db.execute(text("ALTER TABLE accessories ADD COLUMN IF NOT EXISTS long_description TEXT"))
+                db.execute(text("ALTER TABLE accessories ADD COLUMN IF NOT EXISTS images VARCHAR(2000)"))
+                db.execute(text("ALTER TABLE accessories ADD COLUMN IF NOT EXISTS features VARCHAR(2000)"))
+                db.execute(text("ALTER TABLE accessories ADD COLUMN IF NOT EXISTS compatibility VARCHAR(500)"))
+                db.execute(text("ALTER TABLE accessories ADD COLUMN IF NOT EXISTS brand VARCHAR(100)"))
+                db.execute(text("ALTER TABLE accessories ADD COLUMN IF NOT EXISTS rating FLOAT DEFAULT 0.0"))
+                db.execute(text("ALTER TABLE accessories ADD COLUMN IF NOT EXISTS reviews_count INTEGER DEFAULT 0"))
+                db.execute(text("ALTER TABLE accessories ADD COLUMN IF NOT EXISTS is_featured BOOLEAN DEFAULT FALSE"))
+                db.commit()
+                print("[Migration] Added missing UC004D accessory columns")
+            except Exception as migration_error:
+                db.rollback()
+                print(f"[Migration] UC004D accessory column migration issue: {migration_error}")
+
+        # Ensure accessories are linked to at least one vendor for checkout flows
+        try:
+            existing_vendor = db.execute(text("SELECT id FROM vendors ORDER BY id LIMIT 1")).fetchone()
+            if not existing_vendor:
+                db.execute(text("""
+                    INSERT INTO vendors (name, email, whatsapp_number, payment_gateway, payment_gateway_url, status, created_at, updated_at)
+                    VALUES ('Trail Gear Vendor', 'vendor@test.com', '919999999999', 'razorpay', 'https://payments.example.com/pay', 'active', NOW(), NOW())
+                """))
+                db.commit()
+                existing_vendor = db.execute(text("SELECT id FROM vendors ORDER BY id LIMIT 1")).fetchone()
+                print("[Seed] Created default UC004D vendor")
+
+            if existing_vendor:
+                db.execute(text("UPDATE accessories SET vendor_id = :vendor_id WHERE vendor_id IS NULL"), {"vendor_id": existing_vendor[0]})
+                db.commit()
+                print("[Seed] Backfilled vendor_id for existing accessories")
+        except Exception as vendor_backfill_error:
+            db.rollback()
+            print(f"[Seed] UC004D vendor backfill issue: {vendor_backfill_error}")
         
         # Check if accessories/merchandise exist
         accessories_count = db.execute(text("SELECT COUNT(*) as count FROM accessories")).fetchone()

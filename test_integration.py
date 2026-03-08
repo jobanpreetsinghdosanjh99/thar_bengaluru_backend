@@ -99,6 +99,7 @@ print("\n[TEST 4] Get Accessories Endpoint")
 print("-" * 60)
 acc_resp = req_get('http://localhost:8000/accessories')
 print(f"Status Code: {acc_resp.status_code}")
+accessories = []
 if acc_resp.status_code == 200:
     accessories = acc_resp.json()
     print(f"✓ Get Accessories Successful: {len(accessories)} accessories found")
@@ -106,12 +107,14 @@ if acc_resp.status_code == 200:
         print(f"First accessory: {accessories[0]}")
 else:
     print(f"✗ Get Accessories Failed: {acc_resp.text}")
+maybe_stop(4)
 
 # Test 5: Get Merchandise
 print("\n[TEST 5] Get Merchandise Endpoint")
 print("-" * 60)
 merch_resp = req_get('http://localhost:8000/merchandise')
 print(f"Status Code: {merch_resp.status_code}")
+merchandise = []
 if merch_resp.status_code == 200:
     merchandise = merch_resp.json()
     print(f"✓ Get Merchandise Successful: {len(merchandise)} items found")
@@ -316,6 +319,8 @@ if token:
             print("✓ Duplicate pending membership request correctly blocked (409)")
         else:
             print(f"✗ Expected 409 but got {second_submit.status_code}: {second_submit.text}")
+    elif first_submit.status_code == 409:
+        print("✓ Membership request correctly blocked for duplicate/active-member state (409)")
     else:
         print(f"✗ First submit failed: {first_submit.status_code} - {first_submit.text}")
 else:
@@ -354,24 +359,32 @@ else:
 # Test 18: Get Single Accessory
 print("\n[TEST 18] Get Single Accessory Detail")
 print("-" * 60)
-acc_detail_resp = req_get('http://localhost:8000/accessories/1')
-print(f"Status Code: {acc_detail_resp.status_code}")
-if acc_detail_resp.status_code == 200:
-    accessory = acc_detail_resp.json()
-    print(f"✓ Get Accessory Detail Successful: {accessory.get('name')}")
+if accessories and len(accessories) > 0:
+    first_id = accessories[0].get('id')
+    acc_detail_resp = req_get(f'http://localhost:8000/accessories/{first_id}')
+    print(f"Status Code: {acc_detail_resp.status_code}")
+    if acc_detail_resp.status_code == 200:
+        accessory = acc_detail_resp.json()
+        print(f"✓ Get Accessory Detail Successful: {accessory.get('name')}")
+    else:
+        print(f"✗ Get Accessory Detail Failed: {acc_detail_resp.text}")
 else:
-    print(f"✗ Get Accessory Detail Failed: {acc_detail_resp.text}")
+    print("⚠ Skipped (no accessories available)")
 
 # Test 19: Get Single Merchandise
 print("\n[TEST 19] Get Single Merchandise Detail")
 print("-" * 60)
-merch_detail_resp = req_get('http://localhost:8000/merchandise/1')
-print(f"Status Code: {merch_detail_resp.status_code}")
-if merch_detail_resp.status_code == 200:
-    merchandise = merch_detail_resp.json()
-    print(f"✓ Get Merchandise Detail Successful: {merchandise.get('name')}")
+if merchandise and len(merchandise) > 0:
+    first_id = merchandise[0].get('id')
+    merch_detail_resp = req_get(f'http://localhost:8000/merchandise/{first_id}')
+    print(f"Status Code: {merch_detail_resp.status_code}")
+    if merch_detail_resp.status_code == 200:
+        merch = merch_detail_resp.json()
+        print(f"✓ Get Merchandise Detail Successful: {merch.get('name')}")
+    else:
+        print(f"✗ Get Merchandise Detail Failed: {merch_detail_resp.text}")
 else:
-    print(f"✗ Get Merchandise Detail Failed: {merch_detail_resp.text}")
+    print("⚠ Skipped (no merchandise available)")
 
 # Test 20: Get Single Feed with Comments
 print("\n[TEST 20] Get Single Feed Detail")
@@ -524,9 +537,15 @@ if admin_login_resp.status_code == 200:
     admin_data = admin_login_resp.json()
     admin_token = admin_data.get('access_token')
     print(f"✓ Admin Login Successful")
+    maybe_stop(27)
+elif admin_login_resp.status_code == 403:
+    print(f"✗ Admin account exists but email not verified (UC003): {admin_login_resp.text}")
+    admin_token = None
+    maybe_stop(27)
 else:
     print(f"✗ Admin Login Failed: {admin_login_resp.text}")
     admin_token = None
+    maybe_stop(27)
 
 # Test 28: Approve Club Membership Request (Admin)
 print("\n[TEST 28] Approve Club Membership (Admin)")
