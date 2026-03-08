@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional
 from app.database import get_db
 from app.models.models import (
-    User, Event, EventRegistration, CoPassenger, Payment, ClubMembershipRequest,
+    User, Event, EventRegistration, CoPassenger, Payment, ClubMembershipRequest, TharBengaluruMembership,
     EventStatus, EventDifficulty, RegistrationStatus, PaymentStatus,
     MembershipStatus
 )
@@ -201,13 +201,20 @@ def register_for_event(
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     
-    # UC004B A5: Check membership is active (approved membership request)
+    # UC004B/UC006: Check membership is active (club or regular TB membership with successful payment)
     club_membership = db.query(ClubMembershipRequest).filter(
         ClubMembershipRequest.user_id == current_user.id,
-        ClubMembershipRequest.status == MembershipStatus.APPROVED
+        ClubMembershipRequest.status == MembershipStatus.APPROVED,
+        ClubMembershipRequest.payment_status == "success"
     ).order_by(ClubMembershipRequest.created_at.desc()).first()
 
-    if not club_membership:
+    tb_membership = db.query(TharBengaluruMembership).filter(
+        TharBengaluruMembership.user_id == current_user.id,
+        TharBengaluruMembership.status == MembershipStatus.APPROVED,
+        TharBengaluruMembership.payment_status == "success"
+    ).order_by(TharBengaluruMembership.created_at.desc()).first()
+
+    if not club_membership and not tb_membership:
         raise HTTPException(
             status_code=403,
             detail="Active membership required to register for events"

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 from typing import Optional
 from app.database import get_db
-from app.models.models import User, ClubMembershipRequest, TBLRMembership, MembershipStatus
+from app.models.models import User, ClubMembershipRequest, TharBengaluruMembership, TBLRMembership, MembershipStatus
 from app.schemas.schemas import UserRegister, UserLogin, UserResponse, TokenResponse, SocialAuthLogin, ProfileUpdate
 from app.security import get_password_hash, verify_password, create_access_token, decode_access_token
 from app.config import settings
@@ -11,12 +11,23 @@ from app.config import settings
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _club_membership_status_value(membership: Optional[ClubMembershipRequest]) -> Optional[str]:
-    if not membership:
-        return None
-    if membership.status == MembershipStatus.APPROVED:
-        return "active" if membership.payment_status == "success" else "approved_payment_pending"
-    return membership.status.value
+def _membership_status_value(
+    club_membership: Optional[ClubMembershipRequest],
+    tb_membership: Optional[TharBengaluruMembership],
+) -> Optional[str]:
+    if club_membership and club_membership.status == MembershipStatus.APPROVED and club_membership.payment_status == "success":
+        return "active"
+    if tb_membership and tb_membership.status == MembershipStatus.APPROVED and tb_membership.payment_status == "success":
+        return "active"
+    if club_membership and club_membership.status == MembershipStatus.APPROVED:
+        return "approved_payment_pending"
+    if tb_membership and tb_membership.status == MembershipStatus.APPROVED:
+        return "approved_payment_pending"
+    if club_membership:
+        return club_membership.status.value
+    if tb_membership:
+        return tb_membership.status.value
+    return None
 
 
 @router.post("/register", response_model=UserResponse)
@@ -121,6 +132,11 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         TBLRMembership.user_id == user.id,
         TBLRMembership.status.in_([MembershipStatus.APPROVED, MembershipStatus.PENDING])
     ).order_by(TBLRMembership.created_at.desc()).first()
+
+    tb_membership = db.query(TharBengaluruMembership).filter(
+        TharBengaluruMembership.user_id == user.id,
+        TharBengaluruMembership.status.in_([MembershipStatus.APPROVED, MembershipStatus.PENDING])
+    ).order_by(TharBengaluruMembership.created_at.desc()).first()
     
     user_response = UserResponse(
         id=user.id,
@@ -128,7 +144,7 @@ def login(credentials: UserLogin, db: Session = Depends(get_db)):
         email=user.email,
         phone=user.phone,
         role=user.role.value if user.role else "user",
-        membership_status=_club_membership_status_value(club_membership),
+        membership_status=_membership_status_value(club_membership, tb_membership),
         tblr_membership_status=tblr_membership.status.value if tblr_membership else None,
         created_at=user.created_at
     )
@@ -211,6 +227,11 @@ def get_current_user_info(current_user: User = Depends(get_current_user), db: Se
         TBLRMembership.user_id == current_user.id,
         TBLRMembership.status.in_([MembershipStatus.APPROVED, MembershipStatus.PENDING])
     ).order_by(TBLRMembership.created_at.desc()).first()
+
+    tb_membership = db.query(TharBengaluruMembership).filter(
+        TharBengaluruMembership.user_id == current_user.id,
+        TharBengaluruMembership.status.in_([MembershipStatus.APPROVED, MembershipStatus.PENDING])
+    ).order_by(TharBengaluruMembership.created_at.desc()).first()
     
     # Create response with membership statuses
     user_dict = {
@@ -219,7 +240,7 @@ def get_current_user_info(current_user: User = Depends(get_current_user), db: Se
         "email": current_user.email,
         "phone": current_user.phone,
         "role": current_user.role.value if current_user.role else "user",
-        "membership_status": _club_membership_status_value(club_membership),
+        "membership_status": _membership_status_value(club_membership, tb_membership),
         "tblr_membership_status": tblr_membership.status.value if tblr_membership else None,
         "created_at": current_user.created_at
     }
@@ -254,7 +275,7 @@ def update_profile(
     db.refresh(current_user)
     
     # Get membership statuses (same as GET /me)
-    from app.models.models import ClubMembershipRequest, TBLRMembership, MembershipStatus
+    from app.models.models import ClubMembershipRequest, TharBengaluruMembership, TBLRMembership, MembershipStatus
     club_membership = db.query(ClubMembershipRequest).filter(
         ClubMembershipRequest.user_id == current_user.id,
         ClubMembershipRequest.status.in_([MembershipStatus.APPROVED, MembershipStatus.PENDING])
@@ -264,6 +285,11 @@ def update_profile(
         TBLRMembership.user_id == current_user.id,
         TBLRMembership.status.in_([MembershipStatus.APPROVED, MembershipStatus.PENDING])
     ).order_by(TBLRMembership.created_at.desc()).first()
+
+    tb_membership = db.query(TharBengaluruMembership).filter(
+        TharBengaluruMembership.user_id == current_user.id,
+        TharBengaluruMembership.status.in_([MembershipStatus.APPROVED, MembershipStatus.PENDING])
+    ).order_by(TharBengaluruMembership.created_at.desc()).first()
     
     user_dict = {
         "id": current_user.id,
@@ -275,7 +301,7 @@ def update_profile(
         "preferences": current_user.preferences,
         "profile_photo": current_user.profile_photo,
         "role": current_user.role.value if current_user.role else "user",
-        "membership_status": _club_membership_status_value(club_membership),
+        "membership_status": _membership_status_value(club_membership, tb_membership),
         "tblr_membership_status": tblr_membership.status.value if tblr_membership else None,
         "created_at": current_user.created_at
     }
@@ -348,6 +374,11 @@ def social_login(auth_data: SocialAuthLogin, db: Session = Depends(get_db)):
         TBLRMembership.user_id == user.id,
         TBLRMembership.status.in_([MembershipStatus.APPROVED, MembershipStatus.PENDING])
     ).order_by(TBLRMembership.created_at.desc()).first()
+
+    tb_membership = db.query(TharBengaluruMembership).filter(
+        TharBengaluruMembership.user_id == user.id,
+        TharBengaluruMembership.status.in_([MembershipStatus.APPROVED, MembershipStatus.PENDING])
+    ).order_by(TharBengaluruMembership.created_at.desc()).first()
     
     user_response = UserResponse(
         id=user.id,
@@ -355,7 +386,7 @@ def social_login(auth_data: SocialAuthLogin, db: Session = Depends(get_db)):
         email=user.email,
         phone=user.phone,
         role=user.role.value if user.role else "user",
-        membership_status=_club_membership_status_value(club_membership),
+        membership_status=_membership_status_value(club_membership, tb_membership),
         tblr_membership_status=tblr_membership.status.value if tblr_membership else None,
         created_at=user.created_at
     )

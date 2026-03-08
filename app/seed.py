@@ -166,6 +166,23 @@ def seed_data():
             db.commit()
         except Exception:
             db.rollback()
+
+        # UC006: Ensure TB regular membership table is ready and approved+paid users are active
+        try:
+            db.execute(text("SELECT payment_status, membership_id, whatsapp_group_link FROM thar_bengaluru_memberships LIMIT 1"))
+            print("[Check] UC006 TB membership table available")
+        except Exception:
+            db.rollback()
+            # Table is created by metadata on startup if model exists.
+            print("[Migration] UC006 TB membership table not queryable yet; startup table creation will handle it")
+
+        try:
+            db.execute(text("UPDATE thar_bengaluru_memberships SET payment_status = 'success' WHERE status = 'APPROVED' AND (payment_status IS NULL OR payment_status IN ('', 'pending'))"))
+            db.execute(text("UPDATE thar_bengaluru_memberships SET payment_link_enabled = TRUE WHERE status = 'APPROVED'"))
+            db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_tb_memberships_membership_id ON thar_bengaluru_memberships (membership_id)"))
+            db.commit()
+        except Exception:
+            db.rollback()
         
         # Check if accessories/merchandise exist
         accessories_count = db.execute(text("SELECT COUNT(*) as count FROM accessories")).fetchone()

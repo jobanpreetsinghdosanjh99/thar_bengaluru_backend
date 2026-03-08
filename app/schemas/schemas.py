@@ -373,6 +373,106 @@ class ClubMembershipRequestResponse(BaseModel):
         from_attributes = True
 
 
+# ==================== UC006: THAR BENGALURU MEMBERSHIP SCHEMAS ====================
+class TharBengaluruMembershipCreate(BaseModel):
+    first_name: str
+    last_name: str
+    mobile_number: str
+    email_address: str
+    residential_address: str
+    emergency_contact: str
+    vehicle_make: str = "Mahindra"
+    vehicle_model: str
+    vehicle_fuel_type: str
+    vehicle_transmission_type: str
+    vehicle_registration_number: str
+    profile_photo_url: str
+    rc_document_url: str
+    insurance_document_url: Optional[str] = None
+    aadhaar_document_url: str
+    driving_license_document_url: str
+    vehicle_modifications: Optional[str] = None
+    additional_info: Optional[str] = None
+    terms_accepted: bool = False
+
+
+class TharBengaluruMembershipResponse(BaseModel):
+    id: int
+    user_id: int
+    first_name: str
+    last_name: str
+    mobile_number: str
+    email_address: str
+    residential_address: str
+    emergency_contact: str
+    vehicle_make: str
+    vehicle_model: str
+    vehicle_fuel_type: str
+    vehicle_transmission_type: str
+    vehicle_registration_number: str
+    profile_photo_url: str
+    rc_document_url: str
+    insurance_document_url: Optional[str] = None
+    aadhaar_document_url: str
+    driving_license_document_url: str
+    vehicle_modifications: Optional[str] = None
+    additional_info: Optional[str] = None
+    status: str
+    payment_status: Optional[str] = None
+    payment_link_enabled: Optional[bool] = None
+    membership_id: Optional[str] = None
+    whatsapp_group_name: Optional[str] = None
+    whatsapp_group_link: Optional[str] = None
+    whatsapp_join_available: Optional[bool] = None
+    rejection_reason: Optional[str] = None
+    terms_accepted: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class TharBengaluruMembershipEligibilityResponse(BaseModel):
+    eligible: bool
+    reasons: List[str] = []
+    workshop_trail_completed: bool
+    has_existing_membership: bool
+    has_pending_request: bool
+
+
+class TharBengaluruMembershipAutofillResponse(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    mobile_number: Optional[str] = None
+    email_address: Optional[str] = None
+    residential_address: Optional[str] = None
+    emergency_contact: Optional[str] = None
+    vehicle_make: str = "Mahindra"
+    vehicle_model: Optional[str] = None
+    vehicle_registration_number: Optional[str] = None
+    profile_photo_url: Optional[str] = None
+
+
+class TharBengaluruMembershipPaymentResponse(BaseModel):
+    request_id: int
+    payment_status: str
+    payment_gateway: Optional[str] = None
+    payment_order_id: Optional[str] = None
+    payment_url: Optional[str] = None
+    message: str
+
+
+class TharBengaluruMembershipActivationResponse(BaseModel):
+    request_id: int
+    membership_id: Optional[str] = None
+    membership_status: str
+    whatsapp_group_name: Optional[str] = None
+    whatsapp_group_link: Optional[str] = None
+    whatsapp_join_available: bool = False
+    message: str
+
+
 # ==================== TBLR MEMBERSHIP SCHEMAS ====================
 class TBLRMembershipCreate(BaseModel):
     full_name: str

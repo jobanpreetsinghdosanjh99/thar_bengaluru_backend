@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import case
 from typing import List, Optional
 from app.database import get_db
-from app.models.models import Feed, FeedComment, FeedLike, User, ClubMembershipRequest, MembershipStatus
+from app.models.models import Feed, FeedComment, FeedLike, User, ClubMembershipRequest, TharBengaluruMembership, MembershipStatus
 from app.schemas.schemas import FeedCreate, FeedResponse, FeedListResponse, FeedCommentCreate, FeedCommentResponse
 from app.routes.auth import get_current_user
 from app.security import decode_access_token
@@ -12,13 +12,20 @@ from app.security import decode_access_token
 router = APIRouter(prefix="/feeds", tags=["feeds"])
 
 
-def _has_active_club_membership(user_id: int, db: Session) -> bool:
-    membership = db.query(ClubMembershipRequest).filter(
+def _has_active_membership(user_id: int, db: Session) -> bool:
+    club_membership = db.query(ClubMembershipRequest).filter(
         ClubMembershipRequest.user_id == user_id,
         ClubMembershipRequest.status == MembershipStatus.APPROVED,
         ClubMembershipRequest.payment_status == "success"
     ).order_by(ClubMembershipRequest.created_at.desc()).first()
-    return membership is not None
+
+    tb_membership = db.query(TharBengaluruMembership).filter(
+        TharBengaluruMembership.user_id == user_id,
+        TharBengaluruMembership.status == MembershipStatus.APPROVED,
+        TharBengaluruMembership.payment_status == "success"
+    ).order_by(TharBengaluruMembership.created_at.desc()).first()
+
+    return club_membership is not None or tb_membership is not None
 
 
 def _optional_current_user(
@@ -176,7 +183,7 @@ def add_comment(
     db: Session = Depends(get_db)
 ):
     """Add a comment to a feed post."""
-    if not _has_active_club_membership(current_user.id, db):
+    if not _has_active_membership(current_user.id, db):
         raise HTTPException(status_code=403, detail="You cannot interact with posts at this time.")
 
     feed = db.query(Feed).filter(Feed.id == feed_id).first()
@@ -208,7 +215,7 @@ def toggle_like(
     db: Session = Depends(get_db)
 ):
     """Toggle like for a feed post (active club members only)."""
-    if not _has_active_club_membership(current_user.id, db):
+    if not _has_active_membership(current_user.id, db):
         raise HTTPException(status_code=403, detail="You cannot interact with posts at this time.")
 
     feed = db.query(Feed).filter(Feed.id == feed_id).first()

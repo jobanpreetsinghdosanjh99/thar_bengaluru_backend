@@ -586,3 +586,71 @@ class MerchandiseOrderItem(Base):
     # Relationships
     order = relationship("MerchandiseOrder", back_populates="items")
     merchandise = relationship("Merchandise", back_populates="order_items")
+
+# ==================== UC006: REGULAR THAR BENGALURU MEMBERSHIP ====================
+
+class TharBengaluruMembership(Base):
+    """UC006: Regular Thar Bengaluru membership applications for new members."""
+    __tablename__ = "thar_bengaluru_memberships"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # Personal Information
+    first_name = Column(String(255), nullable=False)
+    last_name = Column(String(255), nullable=False)
+    mobile_number = Column(String(15), nullable=False)
+    email_address = Column(String(255), nullable=False)
+    residential_address = Column(Text, nullable=False)
+    emergency_contact = Column(String(15), nullable=False)
+    
+    # Vehicle Information (Mahindra vehicles only)
+    vehicle_make = Column(String(50), default="Mahindra", nullable=False)  # Always "Mahindra"
+    vehicle_model = Column(String(50), nullable=False)  # "Thar" or "Thar Roxx"
+    vehicle_fuel_type = Column(String(20), nullable=False)  # "Diesel", "Petrol", "Alternate"
+    vehicle_transmission_type = Column(String(20), nullable=False)  # "Manual", "Automatic"
+    vehicle_registration_number = Column(String(50), nullable=False)  # Format: KA-03-NM-4040
+    vehicle_modifications = Column(Text, nullable=True)
+    
+    # Document URLs
+    profile_photo_url = Column(String(500), nullable=False)  # Mandatory
+    rc_document_url = Column(String(500), nullable=False)  # RC (Mandatory)
+    insurance_document_url = Column(String(500), nullable=True)
+    aadhaar_document_url = Column(String(500), nullable=False)  # Aadhaar (Mandatory)
+    driving_license_document_url = Column(String(500), nullable=False)  # DL (Mandatory)
+    
+    # Additional Information
+    additional_info = Column(Text, nullable=True)
+    
+    # Membership Lifecycle
+    status = Column(Enum(MembershipStatus), default=MembershipStatus.PENDING)
+    payment_status = Column(String(20), default="pending")  # pending/success/failed
+    payment_gateway = Column(String(50), nullable=True)
+    payment_order_id = Column(String(255), nullable=True)
+    payment_id = Column(String(255), nullable=True)
+    payment_link_enabled = Column(Boolean, default=False)
+    
+    # Admin Review
+    approved_by_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+    
+    # Membership Artifacts
+    membership_id = Column(String(50), unique=True, nullable=True)  # Format: TBLR0001-TBLR9999
+    whatsapp_group_name = Column(String(255), nullable=True)
+    whatsapp_group_link = Column(String(500), nullable=True)
+    whatsapp_join_available = Column(Boolean, default=False)
+    activated_at = Column(DateTime, nullable=True)
+    
+    # Terms & Conditions
+    terms_accepted = Column(Boolean, default=False)
+    
+    # Audit Logging
+    audit_log = Column(Text, nullable=True)  # JSON array of state changes
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", backref="thar_bengaluru_membership", foreign_keys=[user_id])
+    approved_by_admin = relationship("User", foreign_keys=[approved_by_admin_id])
