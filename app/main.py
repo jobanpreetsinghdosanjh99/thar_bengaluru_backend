@@ -13,13 +13,26 @@ app = FastAPI(
 )
 
 # Add CORS middleware with configurable origins
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# In development, allow all localhost/127.0.0.1 origins with wildcard port pattern
+if settings.is_development():
+    # For development: allow localhost and 127.0.0.1 with any port
+    # Since CORSMiddleware doesn't support regex, we'll use a custom approach
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"^http://localhost(:[0-9]+)?$|^http://127\.0\.0\.1(:[0-9]+)?$",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    # Production: use configured origins
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Create tables on startup
 @app.on_event("startup")

@@ -62,34 +62,40 @@ def seed_vendors(db):
 def seed_users(db):
     """Seed test users with verified emails (UC003)"""
     try:
-        # Update existing test users to have verified emails
-        db.execute(text("""
-            UPDATE users SET
-                email_verified = true,
-                failed_login_attempts = 0,
-                last_failed_login_at = NULL
-            WHERE email IN ('rajesh@test.com', 'priya@test.com', 'arjun@test.com', 'admin@test.com')
-        """))
-        db.commit()
-        
-        users_count = db.execute(text("SELECT COUNT(*) as count FROM users")).fetchone()
-        if users_count.count == 0:
+        users_count = db.query(User).count()
+        if users_count == 0:
             # Password: test1234 hashed with bcrypt
-            db.execute(text("""
-                INSERT INTO users (
-                    name, email, phone, password_hash, role, 
-                    email_verified, is_banned, created_at, updated_at
-                ) VALUES
-                ('Rajesh Kumar', 'rajesh@test.com', '9876543210', 
-                 '$2b$12$.HpI93vKuOnLeZTmXII6dO61IR3eFTmPrU.wPPEzU9TPBRVWOgcaC', 
-                 'user', true, false, NOW(), NOW()),
-                ('Priya Singh', 'priya@test.com', '9876543211', 
-                 '$2b$12$.HpI93vKuOnLeZTmXII6dO61IR3eFTmPrU.wPPEzU9TPBRVWOgcaC', 
-                 'user', true, false, NOW(), NOW()),
-                ('Arjun Patel', 'arjun@test.com', '9876543212', 
-                 '$2b$12$.HpI93vKuOnLeZTmXII6dO61IR3eFTmPrU.wPPEzU9TPBRVWOgcaC', 
-                 'user', true, false, NOW(), NOW())
-            """))
+            test_users = [
+                User(
+                    name='Rajesh Kumar',
+                    email='rajesh@test.com',
+                    phone='9876543210',
+                    password_hash='$2b$12$.HpI93vKuOnLeZTmXII6dO61IR3eFTmPrU.wPPEzU9TPBRVWOgcaC',
+                    role=UserRole.USER,
+                    email_verified=True,
+                    is_banned=False,
+                ),
+                User(
+                    name='Priya Singh',
+                    email='priya@test.com',
+                    phone='9876543211',
+                    password_hash='$2b$12$.HpI93vKuOnLeZTmXII6dO61IR3eFTmPrU.wPPEzU9TPBRVWOgcaC',
+                    role=UserRole.USER,
+                    email_verified=True,
+                    is_banned=False,
+                ),
+                User(
+                    name='Arjun Patel',
+                    email='arjun@test.com',
+                    phone='9876543212',
+                    password_hash='$2b$12$.HpI93vKuOnLeZTmXII6dO61IR3eFTmPrU.wPPEzU9TPBRVWOgcaC',
+                    role=UserRole.USER,
+                    email_verified=True,
+                    is_banned=False,
+                ),
+            ]
+            for user in test_users:
+                db.add(user)
             db.commit()
             print("✓ [users] Created 3 test users (email verified)")
         else:
@@ -124,20 +130,38 @@ def seed_users(db):
 def seed_feeds(db):
     """Seed test feed posts"""
     try:
-        feeds_count = db.execute(text("SELECT COUNT(*) as count FROM feeds")).fetchone()
-        if feeds_count.count == 0:
-            db.execute(text("""
-                INSERT INTO feeds (author_id, title, content, image_url, created_at) VALUES
-                (1, 'Amazing Trail Experience', 
-                 'Just finished an amazing trail expedition in the Western Ghats! The terrain was challenging but rewarding.', 
-                 'https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=1200', NOW()),
-                (1, 'New Suspension Upgrade', 
-                 'New suspension upgrade installed! Feel the difference in every bump. Much smoother ride now.', 
-                 'https://images.unsplash.com/photo-1493238792000-8113da705763?w=1200', NOW()),
-                (1, 'Maintenance Tips for Monsoon', 
-                 'Maintenance tips for monsoon season: Check your underbody for rust, ensure all seals are intact, and use synthetic oil. Stay prepared!', 
-                 NULL, NOW())
-            """))
+        from app.models.models import Feed
+        
+        feeds_count = db.query(Feed).count()
+        if feeds_count == 0:
+            # Get first user to use as author
+            first_user = db.query(User).first()
+            if not first_user:
+                print("⚠ [feeds] No users found, skipping feed seeding")
+                return False
+            
+            test_feeds = [
+                Feed(
+                    author_id=first_user.id,
+                    title='Amazing Trail Experience',
+                    content='Just finished an amazing trail expedition in the Western Ghats! The terrain was challenging but rewarding.',
+                    image_url='https://images.unsplash.com/photo-1449965408869-eaa3f722e40d?w=1200'
+                ),
+                Feed(
+                    author_id=first_user.id,
+                    title='New Suspension Upgrade',
+                    content='New suspension upgrade installed! Feel the difference in every bump. Much smoother ride now.',
+                    image_url='https://images.unsplash.com/photo-1493238792000-8113da705763?w=1200'
+                ),
+                Feed(
+                    author_id=first_user.id,
+                    title='Maintenance Tips for Monsoon',
+                    content='Maintenance tips for monsoon season: Check your underbody for rust, ensure all seals are intact, and use synthetic oil. Stay prepared!',
+                    image_url=None
+                ),
+            ]
+            for feed in test_feeds:
+                db.add(feed)
             db.commit()
             print("✓ [feeds] Created 3 test feeds")
         else:
