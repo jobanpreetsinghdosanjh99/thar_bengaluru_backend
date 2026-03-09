@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.env.*
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+test_*.py
+TEST_*.md
+DEPLOYMENT_RUNBOOK.md
