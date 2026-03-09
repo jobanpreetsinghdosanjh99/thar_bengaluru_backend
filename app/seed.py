@@ -355,7 +355,7 @@ def seed_events(db):
                         name, description, event_date, location, 
                         difficulty_level, required_vehicle_type, max_participants, current_participants,
                         registration_deadline, event_fee, per_person_charge, 
-                        safety_requirements, image_url, created_by, status, created_at
+                        safety_requirements, image_url, created_by, status, created_at, updated_at
                     ) VALUES
                     (
                         'Weekend Trail to Nandi Hills',
@@ -371,7 +371,7 @@ def seed_events(db):
                         'https://example.com/nandi-hills.jpg',
                         {creator_id},
                         'PUBLISHED',
-                        NOW()
+                        NOW(), NOW()
                     ),
                     (
                         'Coorg Adventure Expedition',
@@ -387,7 +387,7 @@ def seed_events(db):
                         'https://example.com/coorg-expedition.jpg',
                         {creator_id},
                         'PUBLISHED',
-                        NOW()
+                        NOW(), NOW()
                     ),
                     (
                         'Dandeli River Crossing Challenge',
@@ -403,7 +403,7 @@ def seed_events(db):
                         'https://example.com/dandeli-challenge.jpg',
                         {creator_id},
                         'PUBLISHED',
-                        NOW()
+                        NOW(), NOW()
                     ),
                     (
                         'Night Drive Experience - Kolar',
@@ -419,7 +419,7 @@ def seed_events(db):
                         'https://example.com/night-drive.jpg',
                         {creator_id},
                         'PUBLISHED',
-                        NOW()
+                        NOW(), NOW()
                     ),
                     (
                         'Future Expedition - TBD',
@@ -435,7 +435,7 @@ def seed_events(db):
                         'https://example.com/placeholder.jpg',
                         {creator_id},
                         'DRAFT',
-                        NOW()
+                        NOW(), NOW()
                     )
                 """))
                 db.commit()
