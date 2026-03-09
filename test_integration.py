@@ -2,6 +2,7 @@ import requests
 import json
 import sys
 import argparse
+from pydantic import ValidationError
 
 # Performance: Persistent HTTP Session for connection pooling
 session = requests.Session()
@@ -45,6 +46,20 @@ def maybe_stop(current_test):
         print(f"{'=' * 60}")
         session.close()
         sys.exit(0)
+
+def validate_schema(data, schema_class, item_name="item"):
+    """Validate data against Pydantic schema and return validation result."""
+    try:
+        if isinstance(data, list):
+            for item in data:
+                schema_class(**item)
+        else:
+            schema_class(**data)
+        return True, None
+    except ValidationError as e:
+        return False, str(e)
+    except Exception as e:
+        return False, f"Unexpected error: {str(e)}"
 
 # Fix Unicode encoding on Windows
 if sys.platform == 'win32':
@@ -110,6 +125,17 @@ if acc_resp.status_code == 200:
     print(f"✓ Get Accessories Successful: {len(accessories)} accessories found")
     if accessories:
         print(f"First accessory: {accessories[0]}")
+    
+    # Schema validation
+    try:
+        from app.schemas.schemas import AccessoryDetailResponse
+        is_valid, error = validate_schema(accessories, AccessoryDetailResponse, "accessory")
+        if is_valid:
+            print(f"✓ Schema Validation Passed: All accessories match AccessoryDetailResponse schema")
+        else:
+            print(f"✗ Schema Validation Failed: {error}")
+    except ImportError:
+        print("⚠ Schema validation skipped: Could not import AccessoryDetailResponse")
 else:
     print(f"✗ Get Accessories Failed: {acc_resp.text}")
 maybe_stop(4)
@@ -125,6 +151,17 @@ if merch_resp.status_code == 200:
     print(f"✓ Get Merchandise Successful: {len(merchandise)} items found")
     if merchandise:
         print(f"First item: {merchandise[0]}")
+    
+    # Schema validation
+    try:
+        from app.schemas.schemas import MerchandiseResponse
+        is_valid, error = validate_schema(merchandise, MerchandiseResponse, "merchandise")
+        if is_valid:
+            print(f"✓ Schema Validation Passed: All merchandise match MerchandiseResponse schema")
+        else:
+            print(f"✗ Schema Validation Failed: {error}")
+    except ImportError:
+        print("⚠ Schema validation skipped: Could not import MerchandiseResponse")
 else:
     print(f"✗ Get Merchandise Failed: {merch_resp.text}")
 maybe_stop(5)

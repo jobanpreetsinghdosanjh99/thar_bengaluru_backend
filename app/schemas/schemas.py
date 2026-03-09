@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
 from typing import Optional, List
 
@@ -113,8 +113,18 @@ class AccessoryResponse(BaseModel):
     description: str
     category: str
     price: float
-    image_url: Optional[str]
+    image_url: Optional[str] = None
     stock: int
+    # UC004D: Vendor integration fields
+    vendor_id: Optional[int] = None
+    long_description: Optional[str] = None
+    images: Optional[str] = None  # JSON string
+    features: Optional[str] = None  # JSON string
+    compatibility: Optional[str] = None
+    brand: Optional[str] = None
+    rating: float | None = Field(default=None)
+    reviews_count: int | None = Field(default=None)
+    is_featured: bool | None = Field(default=None)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     
@@ -727,9 +737,9 @@ class AccessoryDetailResponse(BaseModel):
     features: Optional[str]  # JSON list
     compatibility: Optional[str] = None
     brand: Optional[str] = None
-    rating: float
-    reviews_count: int
-    is_featured: bool
+    rating: float | None = Field(default=None)
+    reviews_count: int | None = Field(default=None)
+    is_featured: bool | None = Field(default=None)
     vendor: Optional[VendorResponse] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
